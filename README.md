@@ -1,5 +1,6 @@
 # Blue Arrows Racing Oxford (BAROx)
-University of Oxford
-MEng Engineering Science
-3rd Year Design Project
-Simulations
+University of Oxford <br />
+MEng Engineering Science <br />
+3rd Year Design Project <br />
+Simulations <br />
+Laith Shareiyat
