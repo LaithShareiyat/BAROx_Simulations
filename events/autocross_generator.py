@@ -3,12 +3,12 @@ import matplotlib.pyplot as plt
 from models.track import Track, from_xy
 
 # Formula Student Autocross Rules
-MAX_TRACK_LENGTH = 1500.0           # Maximum track length [m]
-MAX_STRAIGHT_LENGTH = 80.0          # Maximum single straight segment [m]
-TRACK_WIDTH = 3.0                   # Track width [m]
-MIN_HAIRPIN_OUTER_RADIUS = 9.0      # Minimum hairpin outside radius [m]
-MAX_REGULAR_TURN_DIAMETER = 50.0    # Maximum regular turn diameter [m]
-SLALOM_CONE_SEPARATION = (7.5, 12.0)  # Slalom cone separation range [m]
+MAX_TRACK_LENGTH = 1500.0               # Maximum track length [m]
+MAX_STRAIGHT_LENGTH = 80.0              # Maximum single straight segment [m]
+TRACK_WIDTH = 3.0                       # Track width [m]
+MIN_HAIRPIN_OUTER_RADIUS = 9.0          # Minimum hairpin outside radius [m]
+MAX_REGULAR_TURN_DIAMETER = 50.0        # Maximum regular turn diameter [m]
+SLALOM_CONE_SEPARATION = (7.5, 12.0)    # Slalom cone separation range [m]
 
 
 def build_straight(length: float, heading: float, start_x: float, start_y: float, 
@@ -17,7 +17,7 @@ def build_straight(length: float, heading: float, start_x: float, start_y: float
     Generate a straight segment.
     
     Args:
-        length: Segment length [m] (must be ≤ 80m per rules)
+        length: Segment length [m] (must be <= 80m per rules)
         heading: Current heading angle [rad]
         start_x, start_y: Starting coordinates [m]
         ds: Discretisation step [m]
@@ -109,7 +109,7 @@ def build_regular_turn(diameter: float, angle_deg: float, heading: float,
     Generate a regular turn.
     
     Args:
-        diameter: Turn diameter [m] (must be ≤ 50m per rules)
+        diameter: Turn diameter [m] (must be <= 50m per rules)
         angle_deg: Turn angle [degrees]
         heading: Current heading angle [rad]
         start_x, start_y: Starting coordinates [m]
@@ -161,13 +161,13 @@ def build_slalom(n_cones: int, cone_separation: float, heading: float,
     
     # Lateral offset: sinusoidal weave with period = 2 * cone_separation
     # Amplitude is slightly less than half track width to stay within bounds
+    # TODO The actual slalom section is more open than 3m and allows for larger amplitudes
     amplitude = TRACK_WIDTH / 2 * 0.7
     # Phase shift so we pass cones on alternating sides
     # First cone: pass on right (negative offset), second: left, etc.
     lateral_offset = amplitude * np.sin(np.pi * s / cone_separation - np.pi/2)
     
     # Convert to global coordinates
-    # Perpendicular direction (90° to heading)
     perp_x = -np.sin(heading)
     perp_y = np.cos(heading)
     
@@ -311,7 +311,7 @@ def build_standard_autocross() -> tuple[Track, dict]:
     """
     Build a Formula Student autocross track based on specific segment definitions.
     
-    Track layout defined segment by segment with running length counter.
+    Track layout defined segment by segment.
     
     Returns:
         Track object, metadata dict
@@ -421,7 +421,7 @@ def build_standard_autocross() -> tuple[Track, dict]:
 def plot_autocross(track: Track, v: np.ndarray = None, metadata: dict = None,
                    title: str = "Formula Student Autocross"):
     """
-    Plot the autocross track with optional velocity colouring.
+    Plot the autocross track with velocity colouring.
     
     Args:
         track: Track object
@@ -455,9 +455,9 @@ def plot_autocross(track: Track, v: np.ndarray = None, metadata: dict = None,
     ax.plot(track.x[0], track.y[0], 'go', markersize=15, label='Start', zorder=10)
     ax.plot(track.x[-1], track.y[-1], 'rs', markersize=15, label='Finish', zorder=10)
     ax.annotate('START', (track.x[0], track.y[0]), textcoords="offset points",
-                xytext=(10, 10), fontsize=12, fontweight='bold', color='green')
+                xytext=(-20, -20), fontsize=12, fontweight='bold', color='green')
     ax.annotate('FINISH', (track.x[-1], track.y[-1]), textcoords="offset points",
-                xytext=(10, 10), fontsize=12, fontweight='bold', color='red')
+                xytext=(-20, -20), fontsize=12, fontweight='bold', color='red')
     
     # Plot slalom cones
     if metadata is not None and len(metadata.get("slalom_cones_x", [])) > 0:
@@ -497,8 +497,7 @@ def plot_autocross(track: Track, v: np.ndarray = None, metadata: dict = None,
         min_radius = np.inf
     
     info_text = (f'Track length: {track_length:.1f} m\n'
-                 f'Track width: {TRACK_WIDTH} m\n'
-                 f'Min turn radius: {min_radius:.1f} m')
+                 f'Track width: {TRACK_WIDTH} m\n')
     
     if v is not None:
         v_use = v_interp if 'v_interp' in dir() else v

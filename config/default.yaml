@@ -16,9 +16,8 @@ powertrain:
   Fx_max_N: 3900
 
 battery:
-  capacity_kWh: 6.5       # Typical FS EV battery (5-7 kWh)
+  capacity_kWh: 6         # Typical FS EV battery (5-7 kWh)
   initial_soc: 1.0        # Start fully charged
-  min_soc: 0.1            # 10% minimum (safety buffer)
+  min_soc: 0.1            # 10% minimum (safety factor)
   max_discharge_kW: 80    # Match motor power
-  eta_discharge: 0.95     # Battery discharge efficiency
-  # No regen parameters - car does not have regenerative braking
+  eta_discharge: 0.95     # Battery discharge efficiency (safety factor)

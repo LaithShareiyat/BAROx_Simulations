@@ -18,9 +18,9 @@ class EVPowertrainMVP:
 @dataclass(frozen=True)
 class BatteryParams:
     """Battery parameters for energy tracking (no regen)."""
-    capacity_kWh: float         # Total battery capacity [kWh]
-    initial_soc: float = 1.0    # Initial state of charge [0-1]
-    min_soc: float = 0.1        # Minimum allowed SoC [0-1] (safety margin)
+    capacity_kWh: float             # Total battery capacity [kWh]
+    initial_soc: float = 1.0        # Initial state of charge [0-1]
+    min_soc: float = 0.1            # Minimum allowed SoC [0-1] (safety margin)
     max_discharge_kW: float = 80.0  # Maximum discharge power [kW]
     eta_discharge: float = 0.95     # Battery discharge efficiency
 
