@@ -120,7 +120,7 @@ def skidpad_time_from_single_circle(t_circle: float) -> dict:
 def plot_skidpad(track: Track, v: np.ndarray = None, 
                  title: str = "Formula Student Skidpad"):
     """
-    Plot the skidpad track with optional velocity colouring.
+    Plot the skidpad track with velocity colouring.
     
     Args:
         track: Track object

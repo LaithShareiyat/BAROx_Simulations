@@ -34,7 +34,7 @@ def create_vehicle_from_config(config: dict) -> VehicleParams:
         Fx_max=config['powertrain']['Fx_max_N'],
     )
     
-    # Create battery params if present in config (no regen)
+    # Create battery params if present in config
     battery = None
     if 'battery' in config:
         battery = BatteryParams(
@@ -115,8 +115,8 @@ def get_custom_vehicle_params(defaults: dict) -> dict:
     ]
     powertrain_answers = inquirer.prompt(questions)
     
-    # Battery parameters (no regen)
-    print("\n--- Battery (No Regen) ---")
+    # Battery parameters
+    print("\n--- Battery ---")
     battery_defaults = defaults.get('battery', {
         'capacity_kWh': 6.5,
         'initial_soc': 1.0,
@@ -195,7 +195,7 @@ def print_vehicle_params(config: dict):
     print(f"  Max tractive force:    {config['powertrain']['Fx_max_N']} N")
     
     if 'battery' in config:
-        print("\n--- Battery (No Regen) ---")
+        print("\n--- Battery ---")
         print(f"  Capacity:              {config['battery']['capacity_kWh']} kWh")
         print(f"  Initial SoC:           {config['battery']['initial_soc']:.0%}")
         print(f"  Minimum SoC:           {config['battery']['min_soc']:.0%}")
@@ -210,7 +210,7 @@ def compute_metrics(track, v: np.ndarray, vehicle: VehicleParams) -> dict:
     t = lap_time(track, v)
     ax, ay = channels(track, v)
     
-    # Handle energy consumption - may return NaN if issues
+    # Handle energy consumption
     try:
         energy = energy_consumption(track, v, vehicle)
         energy_kwh = energy.get('E_net_kWh', np.nan)
@@ -264,7 +264,6 @@ def run_skidpad_simulation(config: dict):
     vehicle = create_vehicle_from_config(config)
     
     # Solve for velocity profile
-    print("\nSolving for velocity profile...")
     result, t_lap = solve_qss(track, vehicle)
     v = result['v']
     
@@ -285,7 +284,8 @@ def run_skidpad_simulation(config: dict):
     print(f"    Average speed:       {timing['avg_speed']:.2f} m/s ({timing['avg_speed']*3.6:.1f} km/h)")
     print(f"    Max lateral accel:   {metrics['max_ay']:.2f} m/s² ({metrics['max_ay']/9.81:.2f} g)")
     print(f"    Energy (1 circle):   {metrics['energy_consumed_kWh']*1000:.1f} Wh")
-    print("-" * 50)
+    print("-" * 50 + "\n")
+    print("=" * 50 + "\n")
     
     # Add timing to metrics for return
     metrics['t_official'] = timing['t_official']
@@ -309,14 +309,12 @@ def run_autocross_simulation(config: dict):
     
     print("\n" + "=" * 50)
     print("AUTOCROSS SIMULATION")
-    print("=" * 50)
+    print("=" * 50 + "\n")
     
     # Build track
-    print("\nBuilding track...")
     track, metadata = build_standard_autocross()
     
     print(f"Track length: {track.s[-1]:.1f} m")
-    print(f"Number of points: {len(track.x)}")
     
     max_kappa = np.max(np.abs(track.kappa[track.kappa != 0]))
     print(f"Min turn radius: {1/max_kappa:.2f} m")
@@ -343,7 +341,6 @@ def run_autocross_simulation(config: dict):
     vehicle = create_vehicle_from_config(config)
     
     # Solve for velocity profile
-    print("\nSolving for velocity profile...")
     result, t_lap = solve_qss(track, vehicle)
     v = result['v']
     
@@ -362,15 +359,16 @@ def run_autocross_simulation(config: dict):
     print(f"  Max braking decel:     {abs(metrics['min_ax']):.2f} m/s² ({abs(metrics['min_ax'])/9.81:.2f} g)")
     print(f"  Max lateral accel:     {metrics['max_ay']:.2f} m/s² ({metrics['max_ay']/9.81:.2f} g)")
     print(f"  Energy consumed:       {metrics['energy_consumed_kWh']*1000:.1f} Wh")
-    print("-" * 50)
+    print("-" * 50 + "\n")
+    print("=" * 50 + "\n")
     
     # =========================================
-    # BATTERY VALIDATION (No Regen)
+    # BATTERY VALIDATION
     # =========================================
     if vehicle.battery is not None:
-        print("\n" + "-" * 50)
-        print("BATTERY ANALYSIS (No Regen)")
-        print("-" * 50)
+        print("\n" + "=" * 50)
+        print("BATTERY ANALYSIS")
+        print("=" * 50 + "\n")
         
         # Validate battery capacity
         battery_validation = validate_battery_capacity(track, v, vehicle)
@@ -414,7 +412,7 @@ def run_autocross_simulation(config: dict):
             req_capacity = required_battery_capacity(track, v, vehicle, safety_margin=0.2)
             print(f"\n  Recommended minimum capacity: {req_capacity:.2f} kWh")
         
-        print("-" * 50)
+        print("=" * 50 + "\n")
         
         # Store battery results in metrics
         metrics['battery_validation'] = battery_validation
