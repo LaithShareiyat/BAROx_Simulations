@@ -1,0 +1,24 @@
+vehicle:
+  mass_kg: 250
+  g: 9.81
+  Crr: 0.015
+
+aero:
+  rho: 1.225
+  CD_A: 1.1   # m²
+  CL_A: 1.5   # m²
+
+tyre:
+  mu: 1.6
+
+powertrain:
+  P_max_kW: 80
+  Fx_max_N: 3900
+
+battery:
+  capacity_kWh: 6.5       # Typical FS EV battery (5-7 kWh)
+  initial_soc: 1.0        # Start fully charged
+  min_soc: 0.1            # 10% minimum (safety buffer)
+  max_discharge_kW: 80    # Match motor power
+  eta_discharge: 0.95     # Battery discharge efficiency
+  # No regen parameters - car does not have regenerative braking
