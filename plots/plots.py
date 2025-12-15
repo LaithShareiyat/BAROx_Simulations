@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 from models.track import Track
 from models.vehicle import VehicleParams
 from solver.metrics import channels
+from solver.battery import BatteryState, BatteryValidation
+
 
 def plot_track(track: Track, v: np.ndarray = None, title: str = "Track Layout"):
     """Plot track layout, optionally coloured by speed."""
@@ -20,6 +22,7 @@ def plot_track(track: Track, v: np.ndarray = None, title: str = "Track Layout"):
     ax.set_title(title)
     plt.show()
     return fig, ax
+
 
 def plot_speed_profile(track: Track, v: np.ndarray, v_lat: np.ndarray):
     """Plot speed vs distance with lateral limit."""
@@ -45,23 +48,146 @@ def plot_speed_profile(track: Track, v: np.ndarray, v_lat: np.ndarray):
     plt.show()
     return fig, axes
 
-def plot_gg_diagram(track: Track, v: np.ndarray, vehicle: VehicleParams):
-    """Plot g-g diagram showing tyre utilisation."""
-    ax_long, ay_lat = channels(track, v)
+
+def plot_battery_state(track: Track, state: BatteryState, vehicle: VehicleParams,
+                       validation: BatteryValidation = None,
+                       title: str = "Battery State During Lap"):
+    """
+    Plot battery state of charge and power throughout the lap (no regen).
     
-    fig, ax = plt.subplots(figsize=(8, 8))
-    ax.scatter(ay_lat / vehicle.g, ax_long / vehicle.g, s=1, alpha=0.5, label='Operating points')
+    Args:
+        track: Track object
+        state: BatteryState from simulation
+        vehicle: Vehicle parameters
+        validation: Optional validation results
+        title: Plot title
     
-    # Friction circle
-    theta = np.linspace(0, 2 * np.pi, 100)
-    mu = vehicle.tyre.mu
-    ax.plot(mu * np.cos(theta), mu * np.sin(theta), 'r--', lw=2, label=f'Friction limit (μ={mu})')
+    Returns:
+        fig, axes
+    """
+    fig, axes = plt.subplots(3, 1, figsize=(14, 10), sharex=True)
     
-    ax.set_xlabel('$a_y / g$ (lateral)')
-    ax.set_ylabel('$a_x / g$ (longitudinal)')
-    ax.set_aspect('equal')
-    ax.grid(True)
-    ax.legend()
-    ax.set_title('g-g Diagram')
+    # Plot 1: State of Charge
+    ax1 = axes[0]
+    ax1.plot(track.s, state.soc * 100, 'b-', lw=2, label='SoC')
+    ax1.axhline(y=vehicle.battery.min_soc * 100, color='r', linestyle='--', 
+                label=f'Min SoC ({vehicle.battery.min_soc:.0%})')
+    ax1.axhline(y=vehicle.battery.initial_soc * 100, color='g', linestyle='--', 
+                alpha=0.5, label=f'Initial SoC ({vehicle.battery.initial_soc:.0%})')
+    
+    if validation is not None:
+        ax1.axvline(x=validation.min_soc_distance, color='orange', linestyle=':', 
+                    alpha=0.7, label=f'Min SoC point')
+        ax1.scatter([validation.min_soc_distance], [validation.min_soc * 100], 
+                    c='orange', s=100, zorder=5)
+    
+    ax1.fill_between(track.s, 0, vehicle.battery.min_soc * 100, 
+                     color='red', alpha=0.1, label='Depleted zone')
+    ax1.set_ylabel('State of Charge [%]')
+    ax1.set_ylim(0, 105)
+    ax1.legend(loc='upper right')
+    ax1.grid(True, alpha=0.3)
+    ax1.set_title('Battery State of Charge')
+    
+    # Plot 2: Power (discharge only, no regen)
+    ax2 = axes[1]
+    
+    power = state.power_kW
+    ax2.fill_between(track.s, 0, power, color='red', alpha=0.5, label='Discharge')
+    ax2.plot(track.s, power, 'darkred', lw=1)
+    
+    ax2.axhline(y=vehicle.battery.max_discharge_kW, color='red', linestyle='--', 
+                alpha=0.5, label=f'Max discharge ({vehicle.battery.max_discharge_kW:.0f} kW)')
+    ax2.axhline(y=0, color='black', linestyle='-', lw=0.5)
+    
+    ax2.set_ylabel('Power [kW]')
+    ax2.set_ylim(bottom=-5)  # Small negative margin for visibility
+    ax2.legend(loc='upper right')
+    ax2.grid(True, alpha=0.3)
+    ax2.set_title('Electrical Power (No Regenerative Braking)')
+    
+    # Plot 3: Cumulative Energy
+    ax3 = axes[2]
+    ax3.plot(track.s, state.energy_used_kWh * 1000, 'r-', lw=2, label='Energy consumed')
+    
+    # Show usable capacity line
+    usable_capacity_Wh = vehicle.battery.capacity_kWh * (vehicle.battery.initial_soc - vehicle.battery.min_soc) * 1000
+    ax3.axhline(y=usable_capacity_Wh, color='orange', linestyle='--', 
+                alpha=0.7, label=f'Usable capacity ({usable_capacity_Wh:.0f} Wh)')
+    
+    ax3.set_xlabel('Distance [m]')
+    ax3.set_ylabel('Energy [Wh]')
+    ax3.legend(loc='upper left')
+    ax3.grid(True, alpha=0.3)
+    ax3.set_title('Cumulative Energy Consumption')
+    
+    # Add summary text
+    if validation is not None:
+        summary = (
+            f"Battery: {vehicle.battery.capacity_kWh:.2f} kWh\n"
+            f"Energy used: {validation.total_energy_kWh*1000:.1f} Wh\n"
+            f"Final SoC: {validation.final_soc:.1%}\n"
+            f"Min SoC: {validation.min_soc:.1%}\n"
+            f"Peak power: {validation.peak_power_kW:.1f} kW\n"
+            f"Avg power: {validation.avg_power_kW:.1f} kW\n"
+            f"No regen"
+        )
+        status = "✓ SUFFICIENT" if validation.sufficient else "✗ INSUFFICIENT"
+        color = 'green' if validation.sufficient else 'red'
+        
+        fig.text(0.02, 0.98, summary, fontsize=9, verticalalignment='top',
+                 bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
+                 transform=fig.transFigure)
+        fig.text(0.02, 0.70, status, fontsize=12, fontweight='bold', color=color,
+                 verticalalignment='top', transform=fig.transFigure)
+    
+    plt.suptitle(title, fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.93)
     plt.show()
+    
+    return fig, axes
+
+
+def plot_soc_on_track(track: Track, state: BatteryState, vehicle: VehicleParams,
+                      title: str = "SoC Map"):
+    """
+    Plot track coloured by state of charge.
+    
+    Args:
+        track: Track object
+        state: BatteryState from simulation
+        vehicle: Vehicle parameters
+        title: Plot title
+    
+    Returns:
+        fig, ax
+    """
+    fig, ax = plt.subplots(figsize=(12, 10))
+    
+    sc = ax.scatter(track.x, track.y, c=state.soc * 100, cmap='RdYlGn', 
+                    s=10, vmin=0, vmax=100)
+    cbar = plt.colorbar(sc, ax=ax, shrink=0.8)
+    cbar.set_label('State of Charge [%]')
+    
+    # Mark start and finish
+    ax.plot(track.x[0], track.y[0], 'go', markersize=15, label='Start', zorder=10)
+    ax.plot(track.x[-1], track.y[-1], 'rs', markersize=15, label='Finish', zorder=10)
+    
+    # Mark minimum SoC point
+    min_idx = np.argmin(state.soc)
+    ax.scatter([track.x[min_idx]], [track.y[min_idx]], c='orange', s=200, 
+               marker='v', zorder=15, edgecolors='black', linewidths=2,
+               label=f'Min SoC ({state.soc[min_idx]:.1%})')
+    
+    ax.set_aspect('equal')
+    ax.set_xlabel('x [m]')
+    ax.set_ylabel('y [m]')
+    ax.set_title(title)
+    ax.legend(loc='upper right')
+    ax.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.show()
+    
     return fig, ax

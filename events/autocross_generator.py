@@ -419,7 +419,7 @@ def build_standard_autocross() -> tuple[Track, dict]:
 
 
 def plot_autocross(track: Track, v: np.ndarray = None, metadata: dict = None,
-                   title: str = "BAROx Autocross Track"):
+                   title: str = "Formula Student Autocross"):
     """
     Plot the autocross track with optional velocity colouring.
     
@@ -435,7 +435,17 @@ def plot_autocross(track: Track, v: np.ndarray = None, metadata: dict = None,
     fig, ax = plt.subplots(figsize=(16, 12))
     
     if v is not None:
-        sc = ax.scatter(track.x, track.y, c=v, cmap='RdYlGn', s=10, zorder=5)
+        # Ensure v matches track length
+        if len(v) != len(track.x):
+            # Interpolate v to match track points
+            from scipy.interpolate import interp1d
+            s_v = np.linspace(0, track.s[-1], len(v))
+            f = interp1d(s_v, v, kind='linear', fill_value='extrapolate')
+            v_interp = f(track.s)
+        else:
+            v_interp = v
+        
+        sc = ax.scatter(track.x, track.y, c=v_interp, cmap='RdYlGn', s=10, zorder=5)
         cbar = plt.colorbar(sc, ax=ax, shrink=0.8)
         cbar.set_label('Speed [m/s]')
     else:
@@ -459,8 +469,10 @@ def plot_autocross(track: Track, v: np.ndarray = None, metadata: dict = None,
     dx = np.gradient(track.x)
     dy = np.gradient(track.y)
     length = np.sqrt(dx**2 + dy**2)
-    nx = -dy / np.maximum(length, 1e-9)
-    ny = dx / np.maximum(length, 1e-9)
+    # Avoid division by zero
+    length = np.maximum(length, 1e-9)
+    nx = -dy / length
+    ny = dx / length
     
     offset = TRACK_WIDTH / 2
     x_left = track.x + offset * nx
@@ -478,11 +490,21 @@ def plot_autocross(track: Track, v: np.ndarray = None, metadata: dict = None,
     
     # Track info
     track_length = track.s[-1]
-    max_kappa = np.max(np.abs(track.kappa))
-    min_radius = 1 / max_kappa if max_kappa > 0 else np.inf
+    if len(track.kappa) > 0 and np.any(track.kappa != 0):
+        max_kappa = np.max(np.abs(track.kappa[track.kappa != 0]))
+        min_radius = 1 / max_kappa if max_kappa > 0 else np.inf
+    else:
+        min_radius = np.inf
     
     info_text = (f'Track length: {track_length:.1f} m\n'
-                 f'Track width: {TRACK_WIDTH} m\n')
+                 f'Track width: {TRACK_WIDTH} m\n'
+                 f'Min turn radius: {min_radius:.1f} m')
+    
+    if v is not None:
+        v_use = v_interp if 'v_interp' in dir() else v
+        info_text += f'\nAvg speed: {np.mean(v_use):.1f} m/s'
+        info_text += f'\nMax speed: {np.max(v_use):.1f} m/s'
+    
     ax.text(0.02, 0.98, info_text,
             transform=ax.transAxes, fontsize=10, verticalalignment='top',
             bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
