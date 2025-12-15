@@ -97,10 +97,7 @@ def plot_skidpad(track: Track = None, v: np.ndarray = None,
             ax.annotate(f'{label_prefix} Centre', (cx, cy), textcoords="offset points",
                         xytext=(5, -15), fontsize=9, ha='center')
     
-    # =========================================
     # Entry/Exit Lane
-    # =========================================
-    # Calculate lane extent (from bottom of plot to top)
     lane_y_min = -OUTER_CONE_RADIUS - 1
     lane_y_max = OUTER_CONE_RADIUS + 1
     
@@ -121,9 +118,7 @@ def plot_skidpad(track: Track = None, v: np.ndarray = None,
                      ENTRY_LANE_LEFT_X, ENTRY_LANE_RIGHT_X,
                      color='gray', alpha=0.1)
     
-    # =========================================
     # Plot driving line for left circle (from track object)
-    # =========================================
     if v is not None:
         sc = ax.scatter(track.x, track.y, c=v, cmap='RdYlGn', s=20, zorder=5)
         cbar = plt.colorbar(sc, ax=ax, shrink=0.8)
@@ -146,9 +141,6 @@ def plot_skidpad(track: Track = None, v: np.ndarray = None,
     ax.annotate('START', (track.x[0], track.y[0]), textcoords="offset points", 
                 xytext=(10, 10), fontsize=10, fontweight='bold')
     
-    # =========================================
-    # Formatting
-    # =========================================
     ax.set_aspect('equal')
     ax.set_xlabel('x [m]')
     ax.set_ylabel('y [m]')
