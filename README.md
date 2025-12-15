@@ -1,13 +1,22 @@
+<div align="center">
+
 # BAROx Formula Student Lap Time Simulator
 
-**Blue Arrows Racing Oxford (BAROx)**  
-University of Oxford  
-MEng Engineering Science  
+**Blue Arrows Racing Oxford (BAROx)**
+
+![BAROx Logo](resources/BAROx_Logo.png)
+
+University of Oxford 
+ 
+MEng Engineering Science
+
 3rd Year Design Project  
 
 *Author: Laith Shareiyat*
+</div>
 
 ---
+<br/>
 
 ## Overview
 
