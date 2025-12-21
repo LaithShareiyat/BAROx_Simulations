@@ -2,9 +2,20 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class AeroParams:
-    rho: float      # kg/m^3
-    CD_A: float     # m^2
-    CL_A: float     # m^2  
+    rho: float      # kg/m^3 - air density
+    Cd: float       # [-] - drag coefficient
+    Cl: float       # [-] - lift coefficient (downforce is positive)
+    A: float        # m^2 - frontal area
+
+    @property
+    def CD_A(self) -> float:
+        """Drag coefficient × Area [m²]"""
+        return self.Cd * self.A
+
+    @property
+    def CL_A(self) -> float:
+        """Lift coefficient × Area [m²]"""
+        return self.Cl * self.A
 
 @dataclass(frozen=True)
 class TyreParamsMVP:

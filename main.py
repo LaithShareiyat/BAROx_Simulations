@@ -23,8 +23,9 @@ def create_vehicle_from_config(config: dict) -> VehicleParams:
     """Create a VehicleParams object from config dictionary."""
     aero = AeroParams(
         rho=config['aero']['rho'],
-        CD_A=config['aero']['CD_A'],
-        CL_A=config['aero']['CL_A'],
+        Cd=config['aero']['Cd'],
+        Cl=config['aero']['Cl'],
+        A=config['aero']['A'],
     )
     tyre = TyreParamsMVP(
         mu=config['tyre']['mu'],
@@ -82,15 +83,18 @@ def get_custom_vehicle_params(defaults: dict) -> dict:
     # Aero parameters
     print("\n--- Aerodynamics ---")
     questions = [
-        inquirer.Text('rho', 
+        inquirer.Text('rho',
                       message=f"Air density [kg/m³] ({defaults['aero']['rho']})",
                       default=str(defaults['aero']['rho'])),
-        inquirer.Text('CD_A', 
-                      message=f"Drag coefficient × Area (CD×A) [m²] ({defaults['aero']['CD_A']})",
-                      default=str(defaults['aero']['CD_A'])),
-        inquirer.Text('CL_A', 
-                      message=f"Lift coefficient × Area (CL×A) [m²] ({defaults['aero']['CL_A']})",
-                      default=str(defaults['aero']['CL_A'])),
+        inquirer.Text('Cd',
+                      message=f"Drag coefficient (Cd) [-] ({defaults['aero']['Cd']})",
+                      default=str(defaults['aero']['Cd'])),
+        inquirer.Text('Cl',
+                      message=f"Lift coefficient (Cl) [-] ({defaults['aero']['Cl']})",
+                      default=str(defaults['aero']['Cl'])),
+        inquirer.Text('A',
+                      message=f"Frontal area [m²] ({defaults['aero']['A']})",
+                      default=str(defaults['aero']['A'])),
     ]
     aero_answers = inquirer.prompt(questions)
     
@@ -149,8 +153,9 @@ def get_custom_vehicle_params(defaults: dict) -> dict:
         },
         'aero': {
             'rho': float(aero_answers['rho']),
-            'CD_A': float(aero_answers['CD_A']),
-            'CL_A': float(aero_answers['CL_A']),
+            'Cd': float(aero_answers['Cd']),
+            'Cl': float(aero_answers['Cl']),
+            'A': float(aero_answers['A']),
         },
         'tyre': {
             'mu': float(tyre_answers['mu']),
@@ -184,8 +189,11 @@ def print_vehicle_params(config: dict):
     
     print("\n--- Aerodynamics ---")
     print(f"  Air density:           {config['aero']['rho']} kg/m³")
-    print(f"  CD × A:                {config['aero']['CD_A']} m²")
-    print(f"  CL × A:                {config['aero']['CL_A']} m²")
+    print(f"  Drag coefficient (Cd): {config['aero']['Cd']}")
+    print(f"  Lift coefficient (Cl): {config['aero']['Cl']}")
+    print(f"  Frontal area (A):      {config['aero']['A']} m²")
+    print(f"  CD × A:                {config['aero']['Cd'] * config['aero']['A']:.3f} m²")
+    print(f"  CL × A:                {config['aero']['Cl'] * config['aero']['A']:.3f} m²")
     
     print("\n--- Tyre ---")
     print(f"  Friction coeff (μ):    {config['tyre']['mu']}")
