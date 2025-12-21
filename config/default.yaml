@@ -5,8 +5,9 @@ vehicle:
 
 aero:
   rho: 1.225
-  CD_A: 1.1   # m²
-  CL_A: 1.5   # m²
+  Cd: 1.1     # Drag coefficient [-]
+  Cl: 1.5     # Lift coefficient [-] (downforce is positive)
+  A: 1.0      # Frontal area [m²]
 
 tyre:
   mu: 1.6
