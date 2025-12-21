@@ -504,8 +504,8 @@ def plot_autocross(track: Track, v: np.ndarray = None, metadata: dict = None,
         info_text += f'\nAvg speed: {np.mean(v_use):.1f} m/s'
         info_text += f'\nMax speed: {np.max(v_use):.1f} m/s'
     
-    ax.text(0.02, 0.98, info_text,
-            transform=ax.transAxes, fontsize=10, verticalalignment='top',
+    ax.text(0.02, 0.02, info_text,
+            transform=ax.transAxes, fontsize=10, verticalalignment='bottom',
             bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
     
     # Formatting
@@ -513,7 +513,7 @@ def plot_autocross(track: Track, v: np.ndarray = None, metadata: dict = None,
     ax.set_xlabel('x [m]')
     ax.set_ylabel('y [m]')
     ax.set_title(title)
-    ax.legend(loc='upper right')
+    ax.legend(loc='lower right')
     ax.grid(True, alpha=0.3)
     
     plt.tight_layout()
