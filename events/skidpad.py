@@ -48,44 +48,178 @@ def build_skidpad_track(n_points: int = 100) -> Track:
 def build_skidpad_full_run(n_points_per_circle: int = 100) -> Track:
     """
     Build the full skidpad run (entry + 2 right + 2 left + exit).
-    
+
     This is for visualization purposes. For timing, use build_skidpad_track().
-    
+
+    Layout:
+    - Left circle: centered at (0, 0)
+    - Right circle: centered at (18.25, 0) = (2 * SKIDPAD_CENTRE_RADIUS, 0)
+    - Circles touch at (9.125, 0)
+
     Args:
         n_points_per_circle: Number of points per circle
-    
+
     Returns:
         Track object representing full figure-8 run
     """
-    # Entry straight (15m approach)
+    # Circle centres
+    left_centre = (0.0, 0.0)
+    right_centre = (2 * SKIDPAD_CENTRE_RADIUS, 0.0)  # (18.25, 0)
+
+    # Entry straight (15m approach) - approaching from left side
     entry_length = 15.0
     n_entry = 15
-    x_entry = np.linspace(-entry_length, 0, n_entry)
+    x_entry = np.linspace(-SKIDPAD_CENTRE_RADIUS - entry_length, -SKIDPAD_CENTRE_RADIUS, n_entry)
     y_entry = np.zeros(n_entry)
-    
-    # Right circle - 2 laps (clockwise, so negative angle)
-    # Circle centre is at (SKIDPAD_CENTRE_RADIUS, 0)
+
+    # Left circle - 2 laps (counter-clockwise starting from left side)
+    # Start at (-R, 0), go counter-clockwise
+    theta_left = np.linspace(np.pi, np.pi + 4*np.pi, 2 * n_points_per_circle, endpoint=False)
+    x_left = left_centre[0] + SKIDPAD_CENTRE_RADIUS * np.cos(theta_left)
+    y_left = left_centre[1] + SKIDPAD_CENTRE_RADIUS * np.sin(theta_left)
+
+    # Right circle - 2 laps (clockwise starting from the touching point)
+    # Start at (R, 0) of left circle = touching point, go clockwise on right circle
     theta_right = np.linspace(np.pi, np.pi - 4*np.pi, 2 * n_points_per_circle, endpoint=False)
-    x_right = SKIDPAD_CENTRE_RADIUS * np.cos(theta_right) + SKIDPAD_CENTRE_RADIUS
-    y_right = SKIDPAD_CENTRE_RADIUS * np.sin(theta_right)
-    
-    # Left circle - 2 laps (counter-clockwise, positive angle)
-    # Circle centre is at (-SKIDPAD_CENTRE_RADIUS, 0)
-    theta_left = np.linspace(0, 4*np.pi, 2 * n_points_per_circle, endpoint=False)
-    x_left = SKIDPAD_CENTRE_RADIUS * np.cos(theta_left) - SKIDPAD_CENTRE_RADIUS
-    y_left = SKIDPAD_CENTRE_RADIUS * np.sin(theta_left)
-    
-    # Exit straight (15m)
+    x_right = right_centre[0] + SKIDPAD_CENTRE_RADIUS * np.cos(theta_right)
+    y_right = right_centre[1] + SKIDPAD_CENTRE_RADIUS * np.sin(theta_right)
+
+    # Exit straight (15m) - exiting from the touching point back to left
     exit_length = 15.0
     n_exit = 15
-    x_exit = np.linspace(0, -exit_length, n_exit)
+    x_exit = np.linspace(SKIDPAD_CENTRE_RADIUS, SKIDPAD_CENTRE_RADIUS + exit_length, n_exit)
     y_exit = np.zeros(n_exit)
-    
+
     # Combine all segments
-    x = np.concatenate([x_entry, x_right, x_left, x_exit])
-    y = np.concatenate([y_entry, y_right, y_left, y_exit])
-    
+    x = np.concatenate([x_entry, x_left, x_right, x_exit])
+    y = np.concatenate([y_entry, y_left, y_right, y_exit])
+
     return from_xy(x, y, closed=False)
+
+
+def plot_skidpad_full(title: str = "Formula Student Skidpad - Full Layout"):
+    """
+    Plot the full skidpad layout showing both circles with entry/exit lanes.
+
+    Layout:
+    - Left circle: centered at (0, 0)
+    - Right circle: centered at (18.25, 0)
+    - Entry lane: from bottom, between x = 7.625 and x = 10.625
+    - Exit lane: to top, between x = 7.625 and x = 10.625
+
+    Run order: Enter from bottom -> 2 laps left circle -> 2 laps right circle -> Exit top
+
+    Args:
+        title: Plot title
+
+    Returns:
+        fig, ax: Matplotlib figure and axes
+    """
+    fig, ax = plt.subplots(figsize=(14, 12))
+
+    # Circle centres
+    left_centre = (0.0, 0.0)
+    right_centre = (2 * SKIDPAD_CENTRE_RADIUS, 0.0)  # (18.25, 0)
+
+    # Lane boundaries (vertical lanes between circles)
+    lane_left_x = SKIDPAD_INNER_RADIUS    # 7.625
+    lane_right_x = SKIDPAD_OUTER_RADIUS   # 10.625
+    lane_centre_x = SKIDPAD_CENTRE_RADIUS  # 9.125
+
+    # Lane extends slightly beyond circles for entry/exit
+    lane_extension = 3.0  # Short extension beyond circles
+    lane_bottom_y = -SKIDPAD_OUTER_RADIUS - lane_extension
+    lane_top_y = SKIDPAD_OUTER_RADIUS + lane_extension
+
+    theta = np.linspace(0, 2*np.pi, 100)
+
+    # Left circle boundaries and centre line
+    ax.plot(left_centre[0] + SKIDPAD_INNER_RADIUS * np.cos(theta),
+            left_centre[1] + SKIDPAD_INNER_RADIUS * np.sin(theta),
+            'k-', lw=2, label='Track boundaries')
+    ax.plot(left_centre[0] + SKIDPAD_OUTER_RADIUS * np.cos(theta),
+            left_centre[1] + SKIDPAD_OUTER_RADIUS * np.sin(theta),
+            'k-', lw=2)
+    ax.plot(left_centre[0] + SKIDPAD_CENTRE_RADIUS * np.cos(theta),
+            left_centre[1] + SKIDPAD_CENTRE_RADIUS * np.sin(theta),
+            'b--', lw=1.5, alpha=0.7, label='Centre line (driving line)')
+
+    # Right circle boundaries and centre line
+    ax.plot(right_centre[0] + SKIDPAD_INNER_RADIUS * np.cos(theta),
+            right_centre[1] + SKIDPAD_INNER_RADIUS * np.sin(theta),
+            'k-', lw=2)
+    ax.plot(right_centre[0] + SKIDPAD_OUTER_RADIUS * np.cos(theta),
+            right_centre[1] + SKIDPAD_OUTER_RADIUS * np.sin(theta),
+            'k-', lw=2)
+    ax.plot(right_centre[0] + SKIDPAD_CENTRE_RADIUS * np.cos(theta),
+            right_centre[1] + SKIDPAD_CENTRE_RADIUS * np.sin(theta),
+            'b--', lw=1.5, alpha=0.7)
+
+    # Continuous lane through the middle (from entry bottom to exit top)
+    # Boundaries and centre line extend through where circles meet
+    ax.plot([lane_left_x, lane_left_x], [lane_bottom_y, lane_top_y], 'k-', lw=2)
+    ax.plot([lane_right_x, lane_right_x], [lane_bottom_y, lane_top_y], 'k-', lw=2)
+    ax.plot([lane_centre_x, lane_centre_x], [lane_bottom_y, lane_top_y], 'b--', lw=1.5, alpha=0.7)
+
+    # Shade circle track areas
+    for centre in [left_centre, right_centre]:
+        theta_fill = np.linspace(0, 2*np.pi, 100)
+        x_outer = centre[0] + SKIDPAD_OUTER_RADIUS * np.cos(theta_fill)
+        y_outer = centre[1] + SKIDPAD_OUTER_RADIUS * np.sin(theta_fill)
+        x_inner = centre[0] + SKIDPAD_INNER_RADIUS * np.cos(theta_fill[::-1])
+        y_inner = centre[1] + SKIDPAD_INNER_RADIUS * np.sin(theta_fill[::-1])
+        ax.fill(np.concatenate([x_outer, x_inner]),
+                np.concatenate([y_outer, y_inner]),
+                color='gray', alpha=0.2)
+
+    # Shade the continuous lane (from bottom to top through middle)
+    ax.fill([lane_left_x, lane_right_x, lane_right_x, lane_left_x],
+            [lane_bottom_y, lane_bottom_y, lane_top_y, lane_top_y],
+            color='gray', alpha=0.2)
+
+    # Mark circle centres
+    ax.plot(*left_centre, 'rx', markersize=10, mew=2, label='Circle centres')
+    ax.plot(*right_centre, 'rx', markersize=10, mew=2)
+    ax.annotate('Left circle\n(0, 0)', left_centre, textcoords="offset points",
+                xytext=(0, -25), ha='center', fontsize=9)
+    ax.annotate('Right circle\n(18.25, 0)', right_centre, textcoords="offset points",
+                xytext=(0, -25), ha='center', fontsize=9)
+
+    # Mark entry point (bottom of lane)
+    entry_point = (lane_centre_x, lane_bottom_y)
+    ax.plot(*entry_point, 'g^', markersize=12, label='Entry', zorder=10)
+    ax.annotate('ENTRY', entry_point, textcoords="offset points",
+                xytext=(15, 0), fontsize=10, fontweight='bold', color='green')
+
+    # Mark exit point (top of lane)
+    exit_point = (lane_centre_x, lane_top_y)
+    ax.plot(*exit_point, 'rs', markersize=12, label='Exit', zorder=10)
+    ax.annotate('EXIT', exit_point, textcoords="offset points",
+                xytext=(15, 0), fontsize=10, fontweight='bold', color='red')
+
+    # Track info
+    info_text = (f'Centre line radius: {SKIDPAD_CENTRE_RADIUS:.3f} m\n'
+                 f'Inner boundary: {SKIDPAD_INNER_RADIUS:.3f} m\n'
+                 f'Outer boundary: {SKIDPAD_OUTER_RADIUS:.3f} m\n'
+                 f'Track width: {TRACK_WIDTH:.1f} m\n'
+                 f'Circle separation: {2*SKIDPAD_CENTRE_RADIUS:.2f} m')
+
+    ax.text(0.02, 0.02, info_text,
+            transform=ax.transAxes, fontsize=10, verticalalignment='bottom',
+            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+
+    # Formatting
+    ax.set_aspect('equal')
+    ax.set_xlabel('x [m]')
+    ax.set_ylabel('y [m]')
+    ax.set_title(title)
+    ax.legend(loc='upper right')
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()
+
+    return fig, ax
 
 
 def skidpad_time_from_single_circle(t_circle: float) -> dict:
@@ -215,7 +349,7 @@ def plot_skidpad(track: Track, v: np.ndarray = None,
 
 if __name__ == "__main__":
     # Test the skidpad track
-    track = build_skidpad_track()
+    track = plot_skidpad_full()
     circle_length = 2 * np.pi * SKIDPAD_CENTRE_RADIUS
     
     print("=" * 50)
