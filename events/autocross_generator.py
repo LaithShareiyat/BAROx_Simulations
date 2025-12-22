@@ -564,8 +564,8 @@ def validate_autocross(track: Track, metadata: dict = None) -> dict:
         "warnings": []
     }
     
-    # Check total length
-    if track.s[-1] > MAX_TRACK_LENGTH:
+    # Check total length (small tolerance for floating-point precision)
+    if track.s[-1] > MAX_TRACK_LENGTH + 0.1:
         results["valid"] = False
         results["errors"].append(
             f"Track length {track.s[-1]:.1f}m exceeds maximum {MAX_TRACK_LENGTH}m"
