@@ -130,53 +130,81 @@ def build_slalom(n_cones: int, cone_separation: float, heading: float,
                  start_x: float, start_y: float, ds: float = 0.5) -> tuple[np.ndarray, np.ndarray, float, float, float, np.ndarray, np.ndarray]:
     """
     Generate a slalom section (weaving between cones placed on the centreline).
-    
+
     The cones are placed along the centreline at equal intervals.
     The car weaves left-right-left-right around them.
-    
+    Includes smooth lead-in and lead-out transitions for proper connection.
+
     Args:
         n_cones: Number of cones (typically 4 per rules)
         cone_separation: Distance between cones [m] (7.5 - 12m per rules)
         heading: Current heading angle [rad]
         start_x, start_y: Starting coordinates [m]
         ds: Discretisation step [m]
-    
+
     Returns:
         x, y arrays, end_x, end_y, new_heading, cone_x, cone_y
     """
     if not (SLALOM_CONE_SEPARATION[0] <= cone_separation <= SLALOM_CONE_SEPARATION[1]):
         raise ValueError(f"Cone separation {cone_separation}m outside allowed range {SLALOM_CONE_SEPARATION}")
-    
-    # Calculate cone positions along centreline
-    cone_positions = np.arange(n_cones) * cone_separation
-    cone_x = start_x + cone_positions * np.cos(heading)
-    cone_y = start_y + cone_positions * np.sin(heading)
-    
-    # Generate slalom path using sinusoidal weave
-    total_length = (n_cones - 1) * cone_separation
-    n_pts = max(int(total_length / ds), 50)
-    
-    # Distance along centreline
-    s = np.linspace(0, total_length, n_pts)[1:]  # Exclude start point
-    
-    # Lateral offset: sinusoidal weave with period = 2 * cone_separation
-    # Amplitude is slightly less than half track width to stay within bounds
-    # TODO The actual slalom section is more open than 3m and allows for larger amplitudes
-    amplitude = TRACK_WIDTH / 2 * 0.7
-    # Phase shift so we pass cones on alternating sides
-    # First cone: pass on right (negative offset), second: left, etc.
-    lateral_offset = amplitude * np.sin(np.pi * s / cone_separation - np.pi/2)
-    
+
+    # Lead-in and lead-out distance for smooth transition
+    lead_distance = cone_separation / 2
+
+    # Core slalom length (from first cone to last cone)
+    core_length = (n_cones - 1) * cone_separation
+
+    # Total path length including transitions
+    total_length = lead_distance + core_length + lead_distance
+
+    n_pts = max(int(total_length / ds), 100)
+
+    # Distance along path from start
+    s = np.linspace(0, total_length, n_pts)
+
+    # Cone positions relative to path start (cones start after lead-in)
+    cone_s_positions = lead_distance + np.arange(n_cones) * cone_separation
+    cone_x = start_x + cone_s_positions * np.cos(heading)
+    cone_y = start_y + cone_s_positions * np.sin(heading)
+
+    # Increased amplitude for wider, more visible turns around cones
+    amplitude = TRACK_WIDTH * 0.8  # 2.4m offset for dramatic weave
+
+    # Distance from the first cone (negative in lead-in, 0 at first cone, positive after)
+    s_from_first_cone = s - lead_distance
+
+    # Base oscillation: cosine that peaks at each cone
+    # At first cone (s_from_first_cone=0): cos(0) = 1, offset = +amplitude (pass on left)
+    # At second cone: cos(π) = -1, offset = -amplitude (pass on right)
+    # At third cone: cos(2π) = 1, offset = +amplitude (pass on left)
+    base_oscillation = np.cos(np.pi * s_from_first_cone / cone_separation)
+
+    # Envelope to smoothly taper to 0 at start and end
+    envelope = np.ones_like(s)
+
+    # Lead-in taper: 0 at s=0, 1 at s=lead_distance
+    lead_in_mask = s < lead_distance
+    envelope[lead_in_mask] = 0.5 * (1 - np.cos(np.pi * s[lead_in_mask] / lead_distance))
+
+    # Lead-out taper: 1 at s=(total_length - lead_distance), 0 at s=total_length
+    lead_out_start = total_length - lead_distance
+    lead_out_mask = s > lead_out_start
+    s_in_leadout = s[lead_out_mask] - lead_out_start
+    envelope[lead_out_mask] = 0.5 * (1 + np.cos(np.pi * s_in_leadout / lead_distance))
+
+    # Final lateral offset
+    lateral_offset = amplitude * base_oscillation * envelope
+
     # Convert to global coordinates
     perp_x = -np.sin(heading)
     perp_y = np.cos(heading)
-    
+
     x = start_x + s * np.cos(heading) + lateral_offset * perp_x
     y = start_y + s * np.sin(heading) + lateral_offset * perp_y
-    
+
     end_x = start_x + total_length * np.cos(heading)
     end_y = start_y + total_length * np.sin(heading)
-    
+
     # Heading remains unchanged (straight slalom)
     return x, y, end_x, end_y, heading, cone_x, cone_y
 
@@ -402,13 +430,13 @@ def build_standard_autocross() -> tuple[Track, dict]:
         
         {"type": "hairpin", "outer_radius": HAIRPIN_OUTER_RADIUS, "direction": "left"},
         
-        {"type": "straight", "length": 50},
+        {"type": "straight", "length": 50.4},
         
         {"type": "arc", "radius": TURN_RADIUS, "angle_deg": 25},
         
         {"type": "chicane", "width": CHICANE_WIDTH, "length": CHICANE_LENGTH},
         
-        {"type": "straight", "length": 50},
+        {"type": "straight", "length": 25},
         
         {"type": "hairpin", "outer_radius": HAIRPIN_OUTER_RADIUS, "direction": "right"},
         
