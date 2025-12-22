@@ -563,8 +563,206 @@ class ResultsPanel(ttk.Frame):
         fig.tight_layout()
         self.track_canvas.draw()
 
+    def update_speed_profile_plot(self, autocross_data: dict = None, skidpad_data: dict = None):
+        """Update the speed profile plot for both events."""
+        fig = self.speed_canvas.get_figure()
+        fig.clear()
+
+        has_autocross = autocross_data is not None
+        has_skidpad = skidpad_data is not None
+
+        if not has_autocross and not has_skidpad:
+            return
+
+        from solver.metrics import channels
+
+        # Determine layout: side by side if both, single column if one
+        if has_autocross and has_skidpad:
+            # 2x2 layout: top row speed, bottom row acceleration
+            ax1 = fig.add_subplot(221)  # Autocross speed
+            ax2 = fig.add_subplot(222)  # Skidpad speed
+            ax3 = fig.add_subplot(223)  # Autocross acceleration
+            ax4 = fig.add_subplot(224)  # Skidpad acceleration
+        elif has_autocross:
+            ax1 = fig.add_subplot(211)
+            ax3 = fig.add_subplot(212)
+            ax2 = ax4 = None
+        else:
+            ax2 = fig.add_subplot(211)
+            ax4 = fig.add_subplot(212)
+            ax1 = ax3 = None
+
+        # Plot Autocross
+        if has_autocross and ax1 is not None:
+            track = autocross_data['track']
+            v = autocross_data['v']
+            v_lat = autocross_data.get('v_lat')
+
+            ax1.plot(track.s, v, 'b-', lw=1.5, label='Speed')
+            if v_lat is not None:
+                ax1.plot(track.s, v_lat, 'r--', alpha=0.5, lw=1, label='Lateral limit')
+            ax1.set_ylabel('Speed [m/s]')
+            ax1.legend(loc='upper right', fontsize=8)
+            ax1.grid(True, alpha=0.3)
+            ax1.set_title('Autocross - Speed Profile')
+
+            ax_long, ay_lat = channels(track, v)
+            ax3.plot(track.s[:-1], ax_long, 'g-', lw=1, label='Longitudinal')
+            ax3.plot(track.s[:-1], ay_lat, 'm-', lw=1, label='Lateral')
+            ax3.axhline(0, color='k', lw=0.5)
+            ax3.set_xlabel('Distance [m]')
+            ax3.set_ylabel('Acceleration [m/s²]')
+            ax3.legend(loc='upper right', fontsize=8)
+            ax3.grid(True, alpha=0.3)
+            ax3.set_title('Autocross - Acceleration')
+
+        # Plot Skidpad
+        if has_skidpad and ax2 is not None:
+            track = skidpad_data['track']
+            v = skidpad_data['v']
+            v_lat = skidpad_data.get('v_lat')
+
+            ax2.plot(track.s, v, 'b-', lw=1.5, label='Speed')
+            if v_lat is not None:
+                ax2.plot(track.s, v_lat, 'r--', alpha=0.5, lw=1, label='Lateral limit')
+            ax2.set_ylabel('Speed [m/s]')
+            ax2.legend(loc='upper right', fontsize=8)
+            ax2.grid(True, alpha=0.3)
+            ax2.set_title('Skidpad - Speed Profile')
+
+            ax_long, ay_lat = channels(track, v)
+            ax4.plot(track.s[:-1], ax_long, 'g-', lw=1, label='Longitudinal')
+            ax4.plot(track.s[:-1], ay_lat, 'm-', lw=1, label='Lateral')
+            ax4.axhline(0, color='k', lw=0.5)
+            ax4.set_xlabel('Distance [m]')
+            ax4.set_ylabel('Acceleration [m/s²]')
+            ax4.legend(loc='upper right', fontsize=8)
+            ax4.grid(True, alpha=0.3)
+            ax4.set_title('Skidpad - Acceleration')
+
+        fig.tight_layout()
+        self.speed_canvas.draw()
+
+    def update_battery_combined_plot(self, autocross_data: dict = None, skidpad_data: dict = None):
+        """Update the battery analysis plot for both events."""
+        fig = self.battery_canvas.get_figure()
+        fig.clear()
+
+        has_autocross = autocross_data is not None and 'battery_state' in autocross_data
+        has_skidpad = skidpad_data is not None and 'battery_state' in skidpad_data
+
+        if not has_autocross and not has_skidpad:
+            # No battery data available
+            ax = fig.add_subplot(111)
+            ax.text(0.5, 0.5, 'No battery data available\n(Battery analysis disabled)',
+                    ha='center', va='center', fontsize=12, color='gray',
+                    transform=ax.transAxes)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            self.battery_canvas.draw()
+            return
+
+        # Determine layout
+        if has_autocross and has_skidpad:
+            # 3 rows x 2 columns
+            ax1 = fig.add_subplot(321)  # Autocross SoC
+            ax2 = fig.add_subplot(322)  # Skidpad SoC
+            ax3 = fig.add_subplot(323)  # Autocross Power
+            ax4 = fig.add_subplot(324)  # Skidpad Power
+            ax5 = fig.add_subplot(325)  # Autocross Energy
+            ax6 = fig.add_subplot(326)  # Skidpad Energy
+        elif has_autocross:
+            ax1 = fig.add_subplot(311)
+            ax3 = fig.add_subplot(312)
+            ax5 = fig.add_subplot(313)
+            ax2 = ax4 = ax6 = None
+        else:
+            ax2 = fig.add_subplot(311)
+            ax4 = fig.add_subplot(312)
+            ax6 = fig.add_subplot(313)
+            ax1 = ax3 = ax5 = None
+
+        # Plot Autocross battery
+        if has_autocross:
+            track = autocross_data['track']
+            battery_state = autocross_data['battery_state']
+            vehicle = autocross_data['vehicle']
+            validation = autocross_data.get('battery_validation')
+
+            # SoC
+            ax1.plot(track.s, battery_state.soc * 100, 'b-', lw=2)
+            ax1.axhline(y=vehicle.battery.min_soc * 100, color='r', linestyle='--',
+                        label=f'Min SoC ({vehicle.battery.min_soc:.0%})')
+            ax1.fill_between(track.s, 0, vehicle.battery.min_soc * 100, color='red', alpha=0.1)
+            ax1.set_ylabel('SoC [%]')
+            ax1.set_ylim(0, 105)
+            ax1.legend(loc='upper right', fontsize=7)
+            ax1.grid(True, alpha=0.3)
+            ax1.set_title('Autocross - State of Charge')
+
+            # Power
+            ax3.fill_between(track.s, 0, battery_state.power_kW, color='red', alpha=0.5)
+            ax3.plot(track.s, battery_state.power_kW, 'darkred', lw=1)
+            ax3.axhline(y=vehicle.battery.max_discharge_kW, color='red', linestyle='--',
+                        alpha=0.5, label=f'Max ({vehicle.battery.max_discharge_kW:.0f} kW)')
+            ax3.set_ylabel('Power [kW]')
+            ax3.legend(loc='upper right', fontsize=7)
+            ax3.grid(True, alpha=0.3)
+            ax3.set_title('Autocross - Discharge Power')
+
+            # Energy
+            ax5.plot(track.s, battery_state.energy_used_kWh * 1000, 'r-', lw=2)
+            usable = vehicle.battery.capacity_kWh * (vehicle.battery.initial_soc - vehicle.battery.min_soc) * 1000
+            ax5.axhline(y=usable, color='orange', linestyle='--', label=f'Usable ({usable:.0f} Wh)')
+            ax5.set_xlabel('Distance [m]')
+            ax5.set_ylabel('Energy [Wh]')
+            ax5.legend(loc='upper left', fontsize=7)
+            ax5.grid(True, alpha=0.3)
+            ax5.set_title('Autocross - Cumulative Energy')
+
+        # Plot Skidpad battery
+        if has_skidpad:
+            track = skidpad_data['track']
+            battery_state = skidpad_data['battery_state']
+            vehicle = skidpad_data['vehicle']
+            validation = skidpad_data.get('battery_validation')
+
+            # SoC
+            ax2.plot(track.s, battery_state.soc * 100, 'b-', lw=2)
+            ax2.axhline(y=vehicle.battery.min_soc * 100, color='r', linestyle='--',
+                        label=f'Min SoC ({vehicle.battery.min_soc:.0%})')
+            ax2.fill_between(track.s, 0, vehicle.battery.min_soc * 100, color='red', alpha=0.1)
+            ax2.set_ylabel('SoC [%]')
+            ax2.set_ylim(0, 105)
+            ax2.legend(loc='upper right', fontsize=7)
+            ax2.grid(True, alpha=0.3)
+            ax2.set_title('Skidpad - State of Charge')
+
+            # Power
+            ax4.fill_between(track.s, 0, battery_state.power_kW, color='red', alpha=0.5)
+            ax4.plot(track.s, battery_state.power_kW, 'darkred', lw=1)
+            ax4.axhline(y=vehicle.battery.max_discharge_kW, color='red', linestyle='--',
+                        alpha=0.5, label=f'Max ({vehicle.battery.max_discharge_kW:.0f} kW)')
+            ax4.set_ylabel('Power [kW]')
+            ax4.legend(loc='upper right', fontsize=7)
+            ax4.grid(True, alpha=0.3)
+            ax4.set_title('Skidpad - Discharge Power')
+
+            # Energy
+            ax6.plot(track.s, battery_state.energy_used_kWh * 1000, 'r-', lw=2)
+            usable = vehicle.battery.capacity_kWh * (vehicle.battery.initial_soc - vehicle.battery.min_soc) * 1000
+            ax6.axhline(y=usable, color='orange', linestyle='--', label=f'Usable ({usable:.0f} Wh)')
+            ax6.set_xlabel('Distance [m]')
+            ax6.set_ylabel('Energy [Wh]')
+            ax6.legend(loc='upper left', fontsize=7)
+            ax6.grid(True, alpha=0.3)
+            ax6.set_title('Skidpad - Cumulative Energy')
+
+        fig.tight_layout()
+        self.battery_canvas.draw()
+
     def update_speed_plot(self, track, v: np.ndarray, v_lat: np.ndarray = None):
-        """Update the speed profile plot."""
+        """Update the speed profile plot (legacy single-event method)."""
         fig = self.speed_canvas.get_figure()
         fig.clear()
 
@@ -596,7 +794,7 @@ class ResultsPanel(ttk.Frame):
         self.speed_canvas.draw()
 
     def update_battery_plot(self, track, battery_state, vehicle, validation=None):
-        """Update the battery analysis plot."""
+        """Update the battery analysis plot (legacy single-event method)."""
         fig = self.battery_canvas.get_figure()
         fig.clear()
 
