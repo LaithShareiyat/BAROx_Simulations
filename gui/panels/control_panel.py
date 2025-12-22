@@ -9,7 +9,8 @@ from typing import Callable, Dict, Any, Optional
 class ControlPanel(ttk.Frame):
     """Left panel containing event selection, parameters, and controls."""
 
-    def __init__(self, parent, on_run: Callable, on_config_change: Callable = None, **kwargs):
+    def __init__(self, parent, on_run: Callable, on_config_change: Callable = None,
+                 on_save_results: Callable = None, **kwargs):
         """
         Create the control panel.
 
@@ -17,11 +18,13 @@ class ControlPanel(ttk.Frame):
             parent: Parent widget
             on_run: Callback function when Run button is clicked
             on_config_change: Callback when configuration changes
+            on_save_results: Callback for saving results
         """
         super().__init__(parent, **kwargs)
 
         self.on_run = on_run
         self.on_config_change = on_config_change
+        self.on_save_results = on_save_results
         self.default_config = self._load_default_config()
 
         # Create scrollable frame
@@ -128,6 +131,7 @@ class ControlPanel(ttk.Frame):
     def _create_parameter_groups(self):
         """Create all parameter input groups."""
         self.param_entries: Dict[str, Dict[str, tk.StringVar]] = {}
+        self.param_widgets: Dict[str, Dict[str, ttk.Entry]] = {}  # Store entry widgets for enabling/disabling
 
         # Vehicle parameters
         self._create_param_section('VEHICLE', 'vehicle', [
@@ -164,6 +168,7 @@ class ControlPanel(ttk.Frame):
         frame.pack(fill='x', padx=10, pady=5)
 
         self.param_entries[section] = {}
+        self.param_widgets[section] = {}  # Store entry widgets
         defaults = self.default_config.get(section, {})
 
         for i, (key, label, unit) in enumerate(params):
@@ -181,6 +186,7 @@ class ControlPanel(ttk.Frame):
                 unit_lbl.grid(row=i, column=2, sticky='w', pady=2)
 
             self.param_entries[section][key] = var
+            self.param_widgets[section][key] = entry  # Store reference to entry widget
 
     def _create_battery_section(self):
         """Create battery parameters section with enable checkbox."""
@@ -188,15 +194,15 @@ class ControlPanel(ttk.Frame):
         frame.pack(fill='x', padx=10, pady=5)
 
         self.battery_enabled = tk.BooleanVar(value=True)
-        cb = ttk.Checkbutton(
+        self.battery_checkbox = ttk.Checkbutton(
             frame, text="Enable Battery Analysis",
             variable=self.battery_enabled,
             command=self._update_battery_state
         )
-        cb.grid(row=0, column=0, columnspan=3, sticky='w', padx=5, pady=5)
+        self.battery_checkbox.grid(row=0, column=0, columnspan=3, sticky='w', padx=5, pady=5)
 
         self.param_entries['battery'] = {}
-        self.battery_widgets = []
+        self.battery_widgets = []  # Store entry widgets for battery section
         defaults = self.default_config.get('battery', {})
 
         params = [
@@ -228,7 +234,9 @@ class ControlPanel(ttk.Frame):
 
     def _update_battery_state(self):
         """Enable/disable battery parameter entries."""
-        state = 'normal' if self.battery_enabled.get() else 'disabled'
+        is_custom = self.config_var.get() == 'custom'
+        # Only enable if both custom mode AND battery is enabled
+        state = 'normal' if (is_custom and self.battery_enabled.get()) else 'disabled'
         for widget in self.battery_widgets:
             if isinstance(widget, ttk.Entry):
                 widget.configure(state=state)
@@ -251,7 +259,7 @@ class ControlPanel(ttk.Frame):
 
         # Run button (prominent)
         run_frame = ttk.Frame(self.scrollable_frame)
-        run_frame.pack(fill='x', padx=10, pady=(5, 15))
+        run_frame.pack(fill='x', padx=10, pady=(5, 10))
 
         self.run_button = ttk.Button(
             run_frame, text="RUN SIMULATION",
@@ -260,16 +268,45 @@ class ControlPanel(ttk.Frame):
         )
         self.run_button.pack(fill='x', ipady=10)
 
+        # Save results button
+        save_frame = ttk.Frame(self.scrollable_frame)
+        save_frame.pack(fill='x', padx=10, pady=(0, 15))
+
+        self.save_button = ttk.Button(
+            save_frame, text="SAVE RESULTS",
+            command=self._on_save_clicked,
+            style='Accent.TButton'
+        )
+        self.save_button.pack(fill='x', ipady=10)
+
+    def _on_save_clicked(self):
+        """Handle save results button click."""
+        if self.on_save_results:
+            self.on_save_results()
+
     def _update_parameter_state(self):
         """Enable/disable parameter entries based on config selection."""
-        state = 'normal' if self.config_var.get() == 'custom' else 'disabled'
+        is_custom = self.config_var.get() == 'custom'
+        state = 'normal' if is_custom else 'disabled'
 
-        for section in self.param_entries.values():
-            for var_name, var in section.items():
-                # Find the entry widget
-                pass  # Entries are always editable, just reset to defaults when standard
+        # Update all parameter entry widgets
+        for section, widgets in self.param_widgets.items():
+            for key, entry in widgets.items():
+                entry.configure(state=state)
 
-        if self.config_var.get() == 'standard':
+        # Update battery widgets (entries only)
+        for widget in self.battery_widgets:
+            if isinstance(widget, ttk.Entry):
+                # Only enable if custom mode AND battery is enabled
+                battery_state = 'normal' if (is_custom and self.battery_enabled.get()) else 'disabled'
+                widget.configure(state=battery_state)
+
+        # Update battery checkbox
+        if hasattr(self, 'battery_checkbox'):
+            self.battery_checkbox.configure(state=state)
+
+        # Reset to defaults when switching to standard
+        if not is_custom:
             self._reset_to_defaults()
 
     def _load_config(self):
@@ -366,6 +403,7 @@ class ControlPanel(ttk.Frame):
         """Set the running state of the panel."""
         state = 'disabled' if running else 'normal'
         self.run_button.configure(state=state)
+        self.save_button.configure(state=state)
         if running:
             self.run_button.configure(text="RUNNING...")
         else:

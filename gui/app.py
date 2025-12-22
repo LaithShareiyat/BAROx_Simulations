@@ -66,7 +66,8 @@ class BAROxGUI:
         self.control_frame = ttk.Frame(self.paned, width=350)
         self.control_panel = ControlPanel(
             self.control_frame,
-            on_run=self.run_simulation
+            on_run=self.run_simulation,
+            on_save_results=self.save_results
         )
         self.control_panel.pack(fill='both', expand=True)
 
@@ -311,8 +312,8 @@ class BAROxGUI:
         # Update battery plot (for both events)
         self.results_panel.update_battery_combined_plot(autocross_data, skidpad_data)
 
-        # Update battery sweep plot (autocross only)
-        if autocross_data and autocross_data.get('battery_sweep'):
+        # Update battery sweep plot (autocross only - shows message if battery disabled)
+        if autocross_data:
             config = self.control_panel.get_config()
             self.results_panel.update_battery_sweep_plot(autocross_data, config)
 
@@ -341,6 +342,176 @@ class BAROxGUI:
         """Clean up after simulation completes."""
         self.running = False
         self.control_panel.set_running(False)
+
+    def save_results(self):
+        """Save all plots and results to a user-selected folder."""
+        from tkinter import filedialog
+        from datetime import datetime
+        
+        # Check if there are results to save
+        if not self.results:
+            messagebox.showwarning("No Results", "No simulation results to save. Run a simulation first.")
+            return
+        
+        # Ask user to select a folder
+        folder_path = filedialog.askdirectory(
+            title="Select Folder to Save Results",
+            initialdir=os.path.expanduser("~")
+        )
+        
+        if not folder_path:
+            return  # User cancelled
+        
+        try:
+            # Create timestamped subfolder
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            save_folder = os.path.join(folder_path, f"BAROx_Results_{timestamp}")
+            os.makedirs(save_folder, exist_ok=True)
+            
+            saved_files = []
+            
+            # Save plots
+            plots_folder = os.path.join(save_folder, "plots")
+            os.makedirs(plots_folder, exist_ok=True)
+            
+            # Save each plot canvas
+            plot_configs = [
+                (self.results_panel.layout_canvas, "track_layout.png"),
+                (self.results_panel.track_canvas, "speed_track_map.png"),
+                (self.results_panel.speed_canvas, "speed_profile.png"),
+                (self.results_panel.battery_canvas, "battery_analysis.png"),
+                (self.results_panel.sweep_canvas, "battery_sweep.png"),
+            ]
+            
+            for canvas, filename in plot_configs:
+                try:
+                    fig = canvas.get_figure()
+                    filepath = os.path.join(plots_folder, filename)
+                    fig.savefig(filepath, dpi=150, bbox_inches='tight', facecolor='white')
+                    saved_files.append(f"plots/{filename}")
+                except Exception as e:
+                    print(f"Failed to save {filename}: {e}")
+            
+            # Save results text
+            results_text = self._generate_results_text()
+            results_filepath = os.path.join(save_folder, "results.txt")
+            with open(results_filepath, 'w') as f:
+                f.write(results_text)
+            saved_files.append("results.txt")
+            
+            # Save configuration
+            config = self.control_panel.get_config()
+            config_filepath = os.path.join(save_folder, "config.yaml")
+            import yaml
+            with open(config_filepath, 'w') as f:
+                yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+            saved_files.append("config.yaml")
+            
+            # Show success message
+            files_list = "\n".join(f"  • {f}" for f in saved_files)
+            messagebox.showinfo(
+                "Results Saved",
+                f"Results saved to:\n{save_folder}\n\nFiles saved:\n{files_list}"
+            )
+            self.results_panel.set_status(f"Results saved to {save_folder}")
+            
+        except Exception as e:
+            import traceback
+            error_msg = f"Failed to save results: {str(e)}\n\n{traceback.format_exc()}"
+            messagebox.showerror("Save Error", error_msg[:500])
+
+    def _generate_results_text(self) -> str:
+        """Generate comprehensive results text for saving."""
+        from datetime import datetime
+        
+        lines = []
+        lines.append("=" * 70)
+        lines.append("BAROx SIMULATION RESULTS")
+        lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        lines.append("=" * 70)
+        lines.append("")
+        
+        # Configuration summary
+        config = self.control_panel.get_config()
+        lines.append("CONFIGURATION")
+        lines.append("-" * 50)
+        lines.append(f"Vehicle Mass: {config['vehicle']['mass_kg']} kg")
+        lines.append(f"Rolling Resistance (Crr): {config['vehicle']['Crr']}")
+        lines.append(f"Air Density: {config['aero']['rho']} kg/m³")
+        lines.append(f"Drag Coefficient (Cd): {config['aero']['Cd']}")
+        lines.append(f"Lift Coefficient (Cl): {config['aero']['Cl']}")
+        lines.append(f"Frontal Area: {config['aero']['A']} m²")
+        lines.append(f"Tyre Friction (μ): {config['tyre']['mu']}")
+        lines.append(f"Max Power: {config['powertrain']['P_max_kW']} kW")
+        lines.append(f"Max Tractive Force: {config['powertrain']['Fx_max_N']} N")
+        if config['battery'].get('enabled', True):
+            lines.append(f"Battery Capacity: {config['battery']['capacity_kWh']} kWh")
+            lines.append(f"Initial SoC: {config['battery']['initial_soc']*100:.0f}%")
+            lines.append(f"Min SoC: {config['battery']['min_soc']*100:.0f}%")
+        lines.append("")
+        
+        # Autocross results
+        if 'autocross' in self.results:
+            ac = self.results['autocross']
+            lines.append("AUTOCROSS RESULTS")
+            lines.append("-" * 50)
+            lines.append(f"Lap Time: {ac['lap_time']:.3f} s")
+            lines.append(f"Average Speed: {ac['avg_speed']:.2f} m/s ({ac['avg_speed']*3.6:.1f} km/h)")
+            lines.append(f"Maximum Speed: {ac['max_speed']:.2f} m/s ({ac['max_speed']*3.6:.1f} km/h)")
+            lines.append(f"Minimum Speed: {ac['min_speed']:.2f} m/s ({ac['min_speed']*3.6:.1f} km/h)")
+            lines.append(f"Max Longitudinal Accel: {ac['max_ax']:.2f} m/s²")
+            lines.append(f"Max Braking Decel: {ac['min_ax']:.2f} m/s²")
+            lines.append(f"Max Lateral Accel: {ac['max_ay']:.2f} m/s²")
+            
+            if ac.get('track'):
+                lines.append(f"Track Length: {ac['track'].s[-1]:.1f} m")
+            
+            if ac.get('battery_validation'):
+                bv = ac['battery_validation']
+                lines.append("")
+                lines.append("Battery Analysis:")
+                lines.append(f"  Status: {'SUFFICIENT' if bv.sufficient else 'INSUFFICIENT'}")
+                lines.append(f"  Final SoC: {bv.final_soc*100:.1f}%")
+                lines.append(f"  Minimum SoC: {bv.min_soc*100:.1f}%")
+                lines.append(f"  Total Energy: {bv.total_energy_kWh:.3f} kWh")
+                lines.append(f"  Peak Power: {bv.peak_power_kW:.1f} kW")
+                lines.append(f"  Average Power: {bv.avg_power_kW:.1f} kW")
+            
+            if ac.get('battery_sweep'):
+                sweep = ac['battery_sweep']
+                lines.append("")
+                lines.append("Battery Capacity Sweep:")
+                lines.append(f"  Minimum Viable Capacity: {sweep.min_viable_kWh:.3f} kWh")
+                lines.append(f"  Recommended Capacity: {sweep.recommended_kWh:.3f} kWh")
+                lines.append(f"  Energy Required: {sweep.energy_required_kWh:.3f} kWh")
+            
+            lines.append("")
+        
+        # Skidpad results
+        if 'skidpad' in self.results:
+            sp = self.results['skidpad']
+            lines.append("SKIDPAD RESULTS")
+            lines.append("-" * 50)
+            lines.append(f"Official Time (2 laps avg): {sp['t_official']:.3f} s")
+            lines.append(f"Full Run Time: {sp['t_full_run']:.3f} s")
+            lines.append(f"Single Circle Lap Time: {sp['lap_time']:.3f} s")
+            lines.append(f"Cornering Speed: {sp['avg_speed']:.2f} m/s ({sp['avg_speed']*3.6:.1f} km/h)")
+            lines.append(f"Lateral Acceleration: {sp['max_ay']:.2f} m/s²")
+            
+            if sp.get('battery_validation'):
+                bv = sp['battery_validation']
+                lines.append("")
+                lines.append("Battery Analysis (single circle):")
+                lines.append(f"  Energy per circle: {bv.total_energy_kWh*1000:.1f} Wh")
+                lines.append(f"  Average Power: {bv.avg_power_kW:.2f} kW")
+            
+            lines.append("")
+        
+        lines.append("=" * 70)
+        lines.append("End of Report")
+        lines.append("=" * 70)
+        
+        return "\n".join(lines)
 
 
 def main():
