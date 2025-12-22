@@ -216,6 +216,7 @@ class BAROxGUI:
             SKIDPAD_CENTRE_RADIUS
         )
         from solver.qss_speed import solve_qss
+        from solver.battery import simulate_battery, validate_battery_capacity
 
         # Build track
         track = build_skidpad_track()
@@ -233,6 +234,16 @@ class BAROxGUI:
         metrics['t_full_run'] = timing['t_full_run']
         metrics['track'] = track
         metrics['v'] = v
+        metrics['v_lat'] = result['v_lat']
+
+        # Battery analysis (same as autocross)
+        if vehicle.battery is not None:
+            battery_validation = validate_battery_capacity(track, v, vehicle)
+            battery_state = simulate_battery(track, v, vehicle)
+            metrics['battery_validation'] = battery_validation
+            metrics['battery_sufficient'] = battery_validation.sufficient
+            metrics['battery_state'] = battery_state
+            metrics['vehicle'] = vehicle
 
         return metrics
 
@@ -281,21 +292,11 @@ class BAROxGUI:
         # Update speed track map (velocity colored)
         self.results_panel.update_speed_track_plot(autocross_data, skidpad_data)
 
-        # Update speed profile (for autocross)
-        if autocross_data:
-            self.results_panel.update_speed_plot(
-                autocross_data['track'],
-                autocross_data['v'],
-                autocross_data.get('v_lat')
-            )
+        # Update speed profile (for both events)
+        self.results_panel.update_speed_profile_plot(autocross_data, skidpad_data)
 
-            if 'battery_state' in autocross_data:
-                self.results_panel.update_battery_plot(
-                    autocross_data['track'],
-                    autocross_data['battery_state'],
-                    autocross_data['vehicle'],
-                    autocross_data.get('battery_validation')
-                )
+        # Update battery plot (for both events)
+        self.results_panel.update_battery_combined_plot(autocross_data, skidpad_data)
 
         # Show results tab
         self.results_panel.show_tab('results')
