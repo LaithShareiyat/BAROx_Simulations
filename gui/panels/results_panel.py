@@ -57,6 +57,7 @@ class ResultsPanel(ttk.Frame):
         self._create_speed_track_tab()
         self._create_speed_tab()
         self._create_battery_tab()
+        self._create_battery_sweep_tab()
 
         # Status bar at bottom
         self._create_status_bar()
@@ -137,6 +138,15 @@ class ResultsPanel(ttk.Frame):
         self.battery_canvas = PlotCanvas(self.battery_frame, figsize=(10, 8))
         self.battery_canvas.pack(fill='both', expand=True)
 
+    def _create_battery_sweep_tab(self):
+        """Create the battery capacity sweep tab."""
+        self.sweep_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.sweep_frame, text="Battery Sweep")
+
+        from ..widgets.plot_canvas import PlotCanvas
+        self.sweep_canvas = PlotCanvas(self.sweep_frame, figsize=(10, 8))
+        self.sweep_canvas.pack(fill='both', expand=True)
+
     def _create_status_bar(self):
         """Create status bar at bottom."""
         self.status_frame = ttk.Frame(self)
@@ -163,6 +173,7 @@ class ResultsPanel(ttk.Frame):
         self.track_canvas.clear()
         self.speed_canvas.clear()
         self.battery_canvas.clear()
+        self.sweep_canvas.clear()
 
     def set_status(self, message: str, status_type: str = 'normal'):
         """Update status bar message."""
@@ -498,6 +509,8 @@ class ResultsPanel(ttk.Frame):
 
         # Plot skidpad with speed coloring
         if has_skidpad and ax2 is not None:
+            from matplotlib.ticker import ScalarFormatter
+            
             track = skidpad_data['track']
             v = skidpad_data['v']
 
@@ -506,9 +519,23 @@ class ResultsPanel(ttk.Frame):
             ax2.plot(x_left, y_left, 'k-', lw=1, alpha=0.5)
             ax2.plot(x_right, y_right, 'k-', lw=1, alpha=0.5)
 
-            # Speed-colored scatter plot
-            sc = ax2.scatter(track.x, track.y, c=v, cmap='RdYlGn', s=10, zorder=5)
-            fig.colorbar(sc, ax=ax2, label='Speed [m/s]', shrink=0.8)
+            # For skidpad (constant speed), set explicit color limits to avoid
+            # scientific notation in colorbar
+            v_mean = np.mean(v)
+            v_range = np.max(v) - np.min(v)
+            if v_range < 0.1:  # Nearly constant speed
+                # Set color limits with a small margin around the constant speed
+                vmin = v_mean - 0.5
+                vmax = v_mean + 0.5
+                sc = ax2.scatter(track.x, track.y, c=v, cmap='RdYlGn', s=10, 
+                                zorder=5, vmin=vmin, vmax=vmax)
+            else:
+                sc = ax2.scatter(track.x, track.y, c=v, cmap='RdYlGn', s=10, zorder=5)
+            
+            cbar = fig.colorbar(sc, ax=ax2, label='Speed [m/s]', shrink=0.8)
+            # Disable scientific notation on colorbar
+            cbar.ax.yaxis.set_major_formatter(ScalarFormatter(useOffset=False))
+            cbar.ax.ticklabel_format(style='plain', axis='y')
 
             ax2.plot(track.x[0], track.y[0], 'go', markersize=12, label='Start', zorder=10)
             ax2.plot(track.x[-1], track.y[-1], 'rs', markersize=12, label='End', zorder=10)
@@ -516,7 +543,11 @@ class ResultsPanel(ttk.Frame):
             ax2.set_aspect('equal')
             ax2.set_xlabel('x [m]')
             ax2.set_ylabel('y [m]')
-            ax2.set_title('Skidpad - Speed Map')
+            # Show the actual speed value in title for constant speed
+            if v_range < 0.1:
+                ax2.set_title(f'Skidpad - Steady State: {v_mean:.2f} m/s')
+            else:
+                ax2.set_title('Skidpad - Speed Map')
             ax2.legend(loc='upper right', fontsize=8)
             ax2.grid(True, alpha=0.3)
 
@@ -618,6 +649,8 @@ class ResultsPanel(ttk.Frame):
 
         # Plot Skidpad
         if has_skidpad and ax2 is not None:
+            from matplotlib.ticker import ScalarFormatter
+            
             track = skidpad_data['track']
             v = skidpad_data['v']
             v_lat = skidpad_data.get('v_lat')
@@ -628,7 +661,22 @@ class ResultsPanel(ttk.Frame):
             ax2.set_ylabel('Speed [m/s]')
             ax2.legend(loc='upper right', fontsize=8)
             ax2.grid(True, alpha=0.3)
-            ax2.set_title('Skidpad - Speed Profile')
+            
+            # For skidpad (constant speed), set sensible y-axis limits to avoid
+            # scientific notation on a flat line
+            v_mean = np.mean(v)
+            v_range = np.max(v) - np.min(v)
+            if v_range < 0.1:  # Nearly constant speed (skidpad steady-state)
+                # Add ±5% margin around the constant speed
+                margin = max(0.5, v_mean * 0.05)
+                ax2.set_ylim(v_mean - margin, v_mean + margin)
+                ax2.set_title(f'Skidpad - Steady State: {v_mean:.2f} m/s ({v_mean*3.6:.1f} km/h)')
+            else:
+                ax2.set_title('Skidpad - Speed Profile')
+            
+            # Disable scientific notation on y-axis
+            ax2.yaxis.set_major_formatter(ScalarFormatter(useOffset=False))
+            ax2.ticklabel_format(style='plain', axis='y')
 
             ax_long, ay_lat = channels(track, v)
             ax4.plot(track.s[:-1], ax_long, 'g-', lw=1, label='Longitudinal')
@@ -638,6 +686,13 @@ class ResultsPanel(ttk.Frame):
             ax4.set_ylabel('Acceleration [m/s²]')
             ax4.legend(loc='upper right', fontsize=8)
             ax4.grid(True, alpha=0.3)
+            
+            # For skidpad, longitudinal accel should be ~0 (steady state)
+            # Set sensible limits so the plot is readable
+            ax_range = np.max(np.abs(ax_long)) if len(ax_long) > 0 else 0
+            if ax_range < 0.1:  # Nearly zero longitudinal accel (expected for skidpad)
+                ax4.set_ylim(-1, np.max(ay_lat) * 1.1 if len(ay_lat) > 0 else 20)
+            ax4.set_title(f'Skidpad - Lateral: {np.mean(ay_lat):.1f} m/s² ({np.mean(ay_lat)/9.81:.2f} g)')
             ax4.set_title('Skidpad - Acceleration')
 
         fig.tight_layout()
@@ -722,6 +777,8 @@ class ResultsPanel(ttk.Frame):
 
         # Plot Skidpad battery
         if has_skidpad:
+            from matplotlib.ticker import ScalarFormatter
+            
             track = skidpad_data['track']
             battery_state = skidpad_data['battery_state']
             vehicle = skidpad_data['vehicle']
@@ -736,17 +793,30 @@ class ResultsPanel(ttk.Frame):
             ax2.set_ylim(0, 105)
             ax2.legend(loc='upper right', fontsize=7)
             ax2.grid(True, alpha=0.3)
-            ax2.set_title('Skidpad - State of Charge')
+            
+            # For skidpad, SoC drop is very small - show it meaningfully
+            soc_drop = (battery_state.soc[0] - battery_state.soc[-1]) * 100
+            ax2.set_title(f'Skidpad - SoC (Δ = {soc_drop:.3f}%)')
 
-            # Power
-            ax4.fill_between(track.s, 0, battery_state.power_kW, color='red', alpha=0.5)
-            ax4.plot(track.s, battery_state.power_kW, 'darkred', lw=1)
+            # Power - for skidpad it's constant
+            power_kW = battery_state.power_kW
+            ax4.fill_between(track.s, 0, power_kW, color='red', alpha=0.5)
+            ax4.plot(track.s, power_kW, 'darkred', lw=1)
             ax4.axhline(y=vehicle.battery.max_discharge_kW, color='red', linestyle='--',
                         alpha=0.5, label=f'Max ({vehicle.battery.max_discharge_kW:.0f} kW)')
             ax4.set_ylabel('Power [kW]')
             ax4.legend(loc='upper right', fontsize=7)
             ax4.grid(True, alpha=0.3)
-            ax4.set_title('Skidpad - Discharge Power')
+            
+            # For constant power, set sensible y-axis and show the value in title
+            power_mean = np.mean(power_kW)
+            power_range = np.max(power_kW) - np.min(power_kW) if len(power_kW) > 0 else 0
+            if power_range < 0.01:  # Constant power (skidpad steady-state)
+                ax4.set_ylim(0, max(power_mean * 2, 5))  # Show up to 2x the actual or 5kW
+                ax4.set_title(f'Skidpad - Constant Power: {power_mean:.2f} kW')
+            else:
+                ax4.set_title('Skidpad - Discharge Power')
+            ax4.yaxis.set_major_formatter(ScalarFormatter(useOffset=False))
 
             # Energy
             ax6.plot(track.s, battery_state.energy_used_kWh * 1000, 'r-', lw=2)
@@ -756,7 +826,10 @@ class ResultsPanel(ttk.Frame):
             ax6.set_ylabel('Energy [Wh]')
             ax6.legend(loc='upper left', fontsize=7)
             ax6.grid(True, alpha=0.3)
-            ax6.set_title('Skidpad - Cumulative Energy')
+            
+            # Show actual energy used in title
+            energy_used_Wh = battery_state.energy_used_kWh[-1] * 1000 if len(battery_state.energy_used_kWh) > 0 else 0
+            ax6.set_title(f'Skidpad - Energy: {energy_used_Wh:.1f} Wh')
 
         fig.tight_layout()
         self.battery_canvas.draw()
@@ -845,6 +918,91 @@ class ResultsPanel(ttk.Frame):
         fig.subplots_adjust(top=0.93)
         self.battery_canvas.draw()
 
+    def update_battery_sweep_plot(self, autocross_data: Dict[str, Any], config: dict):
+        """Update the battery capacity sweep plot."""
+        sweep_result = autocross_data.get('battery_sweep')
+        if sweep_result is None:
+            return
+
+        track = autocross_data.get('track')
+        lap_time = autocross_data.get('lap_time', 0)
+        track_length = track.s[-1] if track else 0
+
+        fig = self.sweep_canvas.get_figure()
+        fig.clear()
+
+        # Create gridspec for plot and text
+        gs = fig.add_gridspec(2, 1, height_ratios=[1, 2], hspace=0.3)
+
+        # Text summary at top
+        ax_text = fig.add_subplot(gs[0])
+        ax_text.axis('off')
+
+        # Build summary text
+        current_cap = config['battery']['capacity_kWh']
+        is_sufficient = current_cap >= sweep_result.min_viable_kWh
+        
+        summary_text = (
+            f"BATTERY CAPACITY SWEEP - AUTOCROSS\n"
+            f"{'─'*50}\n"
+            f"Track Length: {track_length:.1f} m    |    Lap Time: {lap_time:.3f} s\n"
+            f"{'─'*50}\n"
+            f"Total Energy Required: {sweep_result.energy_required_kWh:.3f} kWh\n"
+            f"Usable SoC Range: {sweep_result.usable_fraction*100:.0f}% "
+            f"(from {config['battery']['initial_soc']*100:.0f}% to {config['battery']['min_soc']*100:.0f}%)\n"
+            f"{'─'*50}\n"
+            f"MINIMUM VIABLE CAPACITY: {sweep_result.min_viable_kWh:.3f} kWh\n"
+            f"Recommended (+10% margin): {sweep_result.recommended_kWh:.3f} kWh\n"
+            f"{'─'*50}\n"
+            f"Current Configured: {current_cap:.3f} kWh   →   "
+            f"{'✓ SUFFICIENT' if is_sufficient else '✗ INSUFFICIENT'}"
+        )
+        
+        ax_text.text(0.5, 0.5, summary_text, transform=ax_text.transAxes,
+                     fontsize=10, fontfamily='monospace',
+                     verticalalignment='center', horizontalalignment='center',
+                     bbox=dict(boxstyle='round', facecolor='#f0f0f0', alpha=0.8))
+
+        # Main sweep plot
+        ax = fig.add_subplot(gs[1])
+
+        # Plot SoC vs capacity
+        ax.plot(sweep_result.capacities_kWh, sweep_result.min_soc * 100, 
+                'b-', linewidth=2, label='Minimum SoC')
+        ax.plot(sweep_result.capacities_kWh, sweep_result.final_soc * 100,
+                'g--', linewidth=2, label='Final SoC')
+
+        # Mark minimum viable capacity
+        ax.axvline(sweep_result.min_viable_kWh, color='r', linestyle='--', 
+                   linewidth=2, label=f'Min Viable: {sweep_result.min_viable_kWh:.2f} kWh')
+        ax.axvline(sweep_result.recommended_kWh, color='orange', linestyle=':',
+                   linewidth=2, label=f'Recommended: {sweep_result.recommended_kWh:.2f} kWh')
+
+        # Mark minimum SoC limit
+        min_soc_limit = config['battery']['min_soc'] * 100
+        ax.axhline(min_soc_limit, color='gray', linestyle='--', alpha=0.7,
+                   label=f'Min SoC Limit: {min_soc_limit:.0f}%')
+
+        # Mark current capacity
+        ax.axvline(current_cap, color='purple', linestyle='-.',
+                   linewidth=2, label=f'Current: {current_cap:.2f} kWh')
+
+        # Shade insufficient region
+        ax.fill_between(sweep_result.capacities_kWh, 0, 100,
+                        where=~sweep_result.sufficient, alpha=0.2, color='red',
+                        label='Insufficient Region')
+
+        ax.set_xlabel('Battery Capacity (kWh)', fontsize=11)
+        ax.set_ylabel('State of Charge (%)', fontsize=11)
+        ax.set_title('Battery Capacity vs. Final State of Charge', fontsize=12, fontweight='bold')
+        ax.legend(loc='lower right', fontsize=9)
+        ax.grid(True, alpha=0.3)
+        ax.set_xlim(sweep_result.capacities_kWh[0], sweep_result.capacities_kWh[-1])
+        ax.set_ylim(0, 105)
+
+        fig.tight_layout()
+        self.sweep_canvas.draw()
+
     def show_tab(self, tab_name: str):
         """Switch to a specific tab by name."""
         tab_map = {
@@ -852,7 +1010,8 @@ class ResultsPanel(ttk.Frame):
             'layout': 1,
             'track': 2,
             'speed': 3,
-            'battery': 4
+            'battery': 4,
+            'sweep': 5
         }
         if tab_name in tab_map:
             self.notebook.select(tab_map[tab_name])

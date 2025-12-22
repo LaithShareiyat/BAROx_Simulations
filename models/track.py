@@ -8,6 +8,7 @@ class Track:
     kappa: np.ndarray   # (N,)
     x: np.ndarray       # (N,)
     y: np.ndarray       # (N,)
+    closed: bool = False  # Whether track forms a closed loop
 
 def from_xy(x: np.ndarray, y: np.ndarray, closed: bool = True) -> Track:
     x = np.asarray(x, dtype=float)
@@ -38,4 +39,4 @@ def from_xy(x: np.ndarray, y: np.ndarray, closed: bool = True) -> Track:
     kappa[0] = kappa[1]
     kappa[-1] = kappa[-2]
 
-    return Track(s=s, ds=ds, kappa=kappa, x=x, y=y)
+    return Track(s=s, ds=ds, kappa=kappa, x=x, y=y, closed=closed)
