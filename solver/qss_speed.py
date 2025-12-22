@@ -6,6 +6,8 @@ class SolverSettings:
     v_min: float = 0.1
     max_iter: int = 30
     tol: float = 1e-3     # m/s
+    min_points: int = 500  # Minimum points for track refinement
+    refine: bool = False   # Whether to refine track resolution
 
 # solver/qss_speed_profile.py
 import numpy as np
@@ -16,7 +18,45 @@ from physics.tyre import a_max, ax_available
 from physics.powertrain import max_tractive_force
 from physics.resistive import rolling_resistance
 
-def solve_qss(track: Track, vehicle: VehicleParams) -> tuple[dict, float]:
+
+def refine_track(track: Track, min_points: int = 500) -> Track:
+    """
+    Refine track to minimum number of points using cubic interpolation.
+    
+    This improves solver accuracy by:
+    - Better curvature estimation at corners
+    - Smoother speed transitions
+    - More accurate lap time integration
+    
+    Args:
+        track: Original track object
+        min_points: Minimum number of points (default 500)
+    
+    Returns:
+        Refined Track object (or original if already fine enough)
+    """
+    if len(track.s) >= min_points:
+        return track
+    
+    from scipy.interpolate import interp1d
+    from models.track import from_xy
+    
+    # Create finer arc-length spacing
+    s_fine = np.linspace(0, track.s[-1], min_points)
+    
+    # Interpolate x and y coordinates
+    x_interp = interp1d(track.s, track.x, kind='cubic', fill_value='extrapolate')
+    y_interp = interp1d(track.s, track.y, kind='cubic', fill_value='extrapolate')
+    
+    x_fine = x_interp(s_fine)
+    y_fine = y_interp(s_fine)
+    
+    # Rebuild track with finer resolution
+    return from_xy(x_fine, y_fine, closed=track.closed)
+
+
+def solve_qss(track: Track, vehicle: VehicleParams, 
+              refine: bool = False, min_points: int = 500) -> tuple[dict, float]:
     """
     Quasi-Steady-State lap time solver.
     
@@ -27,10 +67,26 @@ def solve_qss(track: Track, vehicle: VehicleParams) -> tuple[dict, float]:
     4. Take minimum of all three limits
     5. Integrate time
     
+    Args:
+        track: Track object with geometry
+        vehicle: Vehicle parameters
+        refine: If True, interpolate track to finer resolution for accuracy
+        min_points: Minimum points when refining (default 500)
+    
     Returns:
         result: {"v": velocity array, "v_lat": lateral limit, ...}
         lap_time: Total time [s]
+    
+    Accuracy Notes:
+        - Discretization error scales as O(ds²)
+        - For best accuracy, use ds ≈ 0.5-1.0 m (500-1500 points per km)
+        - Enable refine=True for coarse tracks
+        - For closed tracks (skidpad), enforces periodicity: v_start = v_end
     """
+    # Optionally refine track for better accuracy
+    if refine:
+        track = refine_track(track, min_points)
+    
     n = len(track.s)
     m = vehicle.m
     g = vehicle.g
@@ -66,9 +122,31 @@ def solve_qss(track: Track, vehicle: VehicleParams) -> tuple[dict, float]:
     # STEP 2: Forward pass (acceleration limit)
     # =========================================
     # Starting from rest (or entry speed), accelerate as hard as possible
+    # With LOOK-AHEAD: anticipate upcoming lateral limits to prevent overshoots
+    
+    # For closed tracks: start at lateral limit (already cornering)
+    # For open tracks: start from low speed (standing start)
+    if track.closed:
+        v_start = v_lat[0]  # Already at cornering speed
+    else:
+        v_start = min(v_lat[0], 10.0)  # Standing start
     
     v_fwd = np.zeros(n)
-    v_fwd[0] = min(v_lat[0], 10.0)  # Start speed
+    v_fwd[0] = v_start
+    
+    # Pre-compute maximum braking capability for look-ahead
+    # This helps determine if we can reach a speed and still brake to v_lat
+    def max_entry_speed(v_exit: float, ds: float, v_for_aero: float) -> float:
+        """Calculate maximum entry speed to brake down to v_exit over distance ds."""
+        Fdown = downforce(vehicle.aero.rho, vehicle.aero.CL_A, v_for_aero)
+        Fdrag = drag(vehicle.aero.rho, vehicle.aero.CD_A, v_for_aero)
+        Frr = rolling_resistance(vehicle.Crr, m, g)
+        amax = a_max(mu, g, m, Fdown)
+        # Assume we use full grip for braking (no lateral accel during pure braking)
+        ax_brake = amax + (Fdrag + Frr) / m
+        # v_entry² = v_exit² + 2 * a_brake * ds
+        v_entry_sq = v_exit**2 + 2 * ax_brake * ds
+        return np.sqrt(max(v_entry_sq, 0))
     
     for i in range(n - 1):
         v_i = v_fwd[i]
@@ -98,15 +176,36 @@ def solve_qss(track: Track, vehicle: VehicleParams) -> tuple[dict, float]:
         
         # Kinematic equation: v² = v₀² + 2*a*ds
         v_next_sq = v_i**2 + 2 * ax * ds
-        v_fwd[i + 1] = min(np.sqrt(max(v_next_sq, 0)), v_lat[i + 1])
+        v_kinematic = np.sqrt(max(v_next_sq, 0))
+        
+        # LOOK-AHEAD: Check if we can brake to upcoming lateral limits
+        # Look ahead several segments to find the most restrictive constraint
+        v_max_lookahead = v_kinematic
+        lookahead_distance = 0.0
+        
+        for j in range(i + 1, min(i + 20, n)):  # Look ahead up to 20 segments
+            lookahead_distance += track.ds[j - 1] if j > i + 1 else ds
+            v_lat_ahead = v_lat[j]
+            
+            # What's the max speed we can have NOW and still brake to v_lat_ahead?
+            v_max_entry = max_entry_speed(v_lat_ahead, lookahead_distance, v_i)
+            v_max_lookahead = min(v_max_lookahead, v_max_entry)
+        
+        # Final speed is minimum of kinematic result, lateral limit, and look-ahead
+        v_fwd[i + 1] = min(v_kinematic, v_lat[i + 1], v_max_lookahead)
     
     # =========================================
     # STEP 3: Backward pass (braking limit)
     # =========================================
     # From end, work backwards: what speed could we brake from?
+    # For closed tracks: end speed must equal start speed (periodicity)
     
     v_bwd = np.zeros(n)
-    v_bwd[-1] = v_fwd[-1]
+    if track.closed:
+        # For closed tracks, end speed = start speed (we return to same point)
+        v_bwd[-1] = min(v_fwd[-1], v_lat[-1], v_start)
+    else:
+        v_bwd[-1] = v_fwd[-1]
     
     for i in range(n - 2, -1, -1):
         v_i = v_bwd[i + 1]

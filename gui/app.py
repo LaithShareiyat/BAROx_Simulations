@@ -182,7 +182,7 @@ class BAROxGUI:
         """Run autocross simulation and return metrics."""
         from events.autocross_generator import build_standard_autocross, validate_autocross
         from solver.qss_speed import solve_qss
-        from solver.battery import simulate_battery, validate_battery_capacity
+        from solver.battery import simulate_battery, validate_battery_capacity, sweep_battery_capacity
 
         # Build track
         track, metadata = build_standard_autocross()
@@ -206,6 +206,19 @@ class BAROxGUI:
             metrics['battery_sufficient'] = battery_validation.sufficient
             metrics['battery_state'] = battery_state
             metrics['vehicle'] = vehicle
+            
+            # Battery capacity sweep - uses the actual track and velocity profile
+            try:
+                sweep_result = sweep_battery_capacity(
+                    track, v, vehicle,
+                    min_capacity=0.5,
+                    max_capacity=15.0,
+                    num_points=100
+                )
+                metrics['battery_sweep'] = sweep_result
+            except Exception as e:
+                print(f"Battery sweep failed: {e}")
+                metrics['battery_sweep'] = None
 
         return metrics
 
@@ -297,6 +310,11 @@ class BAROxGUI:
 
         # Update battery plot (for both events)
         self.results_panel.update_battery_combined_plot(autocross_data, skidpad_data)
+
+        # Update battery sweep plot (autocross only)
+        if autocross_data and autocross_data.get('battery_sweep'):
+            config = self.control_panel.get_config()
+            self.results_panel.update_battery_sweep_plot(autocross_data, config)
 
         # Show results tab
         self.results_panel.show_tab('results')
