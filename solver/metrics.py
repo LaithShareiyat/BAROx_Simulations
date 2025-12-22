@@ -20,7 +20,9 @@ def channels(track: Track, v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     ay = v**2 * track.kappa
     
     # Longitudinal: a_x = v * dv/ds
-    dv_ds = np.gradient(v, track.s)
+    # Ensure monotonically increasing s to avoid divide-by-zero in gradient
+    s_safe = np.maximum.accumulate(track.s + np.arange(len(track.s)) * 1e-10)
+    dv_ds = np.gradient(v, s_safe)
     ax = v * dv_ds
     
     return ax[:-1], ay[:-1]

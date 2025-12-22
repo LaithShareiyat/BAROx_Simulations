@@ -176,41 +176,54 @@ def get_custom_vehicle_params(defaults: dict) -> dict:
     return config
 
 
+def print_header(title: str, width: int = 60):
+    """Print a formatted section header."""
+    print("\n" + "=" * width)
+    print(f"  {title}")
+    print("=" * width)
+
+
+def print_subheader(title: str, width: int = 60):
+    """Print a formatted subsection header."""
+    print("\n" + "-" * width)
+    print(f"  {title}")
+    print("-" * width)
+
+
 def print_vehicle_params(config: dict):
     """Print vehicle parameters in a formatted table."""
-    print("\n" + "=" * 50)
-    print("VEHICLE PARAMETERS")
-    print("=" * 50)
-    
-    print("\n--- Vehicle ---")
-    print(f"  Mass:                  {config['vehicle']['mass_kg']} kg")
-    print(f"  Gravity:               {config['vehicle']['g']} m/s²")
-    print(f"  Rolling resistance:    {config['vehicle']['Crr']}")
-    
-    print("\n--- Aerodynamics ---")
-    print(f"  Air density:           {config['aero']['rho']} kg/m³")
-    print(f"  Drag coefficient (Cd): {config['aero']['Cd']}")
-    print(f"  Lift coefficient (Cl): {config['aero']['Cl']}")
-    print(f"  Frontal area (A):      {config['aero']['A']} m²")
-    print(f"  CD × A:                {config['aero']['Cd'] * config['aero']['A']:.3f} m²")
-    print(f"  CL × A:                {config['aero']['Cl'] * config['aero']['A']:.3f} m²")
-    
-    print("\n--- Tyre ---")
-    print(f"  Friction coeff (μ):    {config['tyre']['mu']}")
-    
-    print("\n--- Powertrain ---")
-    print(f"  Max power:             {config['powertrain']['P_max_kW']} kW")
-    print(f"  Max tractive force:    {config['powertrain']['Fx_max_N']} N")
-    
+    print_header("VEHICLE CONFIGURATION")
+
+    cd_a = config['aero']['Cd'] * config['aero']['A']
+    cl_a = config['aero']['Cl'] * config['aero']['A']
+
+    print("\n  VEHICLE")
+    print(f"    Mass:              {config['vehicle']['mass_kg']} kg")
+    print(f"    Gravity:           {config['vehicle']['g']} m/s2")
+    print(f"    Rolling resist:    {config['vehicle']['Crr']}")
+
+    print("\n  AERODYNAMICS")
+    print(f"    Air density:       {config['aero']['rho']} kg/m3")
+    print(f"    Cd:                {config['aero']['Cd']}")
+    print(f"    Cl:                {config['aero']['Cl']}")
+    print(f"    Frontal area:      {config['aero']['A']} m2")
+    print(f"    Cd x A:            {cd_a:.3f} m2")
+    print(f"    Cl x A:            {cl_a:.3f} m2")
+
+    print("\n  TYRE")
+    print(f"    Friction (mu):     {config['tyre']['mu']}")
+
+    print("\n  POWERTRAIN")
+    print(f"    Max power:         {config['powertrain']['P_max_kW']} kW")
+    print(f"    Max force:         {config['powertrain']['Fx_max_N']} N")
+
     if 'battery' in config:
-        print("\n--- Battery ---")
-        print(f"  Capacity:              {config['battery']['capacity_kWh']} kWh")
-        print(f"  Initial SoC:           {config['battery']['initial_soc']:.0%}")
-        print(f"  Minimum SoC:           {config['battery']['min_soc']:.0%}")
-        print(f"  Max discharge:         {config['battery']['max_discharge_kW']} kW")
-        print(f"  Discharge efficiency:  {config['battery'].get('eta_discharge', 0.95):.0%}")
-    
-    print("=" * 50 + "\n")
+        print("\n  BATTERY")
+        print(f"    Capacity:          {config['battery']['capacity_kWh']} kWh")
+        print(f"    Initial SoC:       {config['battery']['initial_soc']:.0%}")
+        print(f"    Min SoC:           {config['battery']['min_soc']:.0%}")
+        print(f"    Max discharge:     {config['battery']['max_discharge_kW']} kW")
+        print(f"    Efficiency:        {config['battery'].get('eta_discharge', 0.95):.0%}")
 
 
 def compute_metrics(track, v: np.ndarray, vehicle: VehicleParams) -> dict:
@@ -248,289 +261,289 @@ def compute_metrics(track, v: np.ndarray, vehicle: VehicleParams) -> dict:
 def run_skidpad_simulation(config: dict):
     """Run the skidpad simulation with lap time calculation."""
     from events.skidpad import (
-        build_skidpad_track, 
-        plot_skidpad, 
+        build_skidpad_track,
+        plot_skidpad,
         skidpad_time_from_single_circle,
         SKIDPAD_CENTRE_RADIUS,
         TRACK_WIDTH
     )
-    
-    print("\n" + "=" * 50)
-    print("SKIDPAD SIMULATION")
-    print("=" * 50)
-    
+
+    print_header("SKIDPAD EVENT")
+
     # Build track (single circle for timing)
     track = build_skidpad_track()
     circle_length = 2 * np.pi * SKIDPAD_CENTRE_RADIUS
-    
-    print(f"\nTrack Configuration:")
-    print(f"  Centre-line radius:    {SKIDPAD_CENTRE_RADIUS:.3f} m")
-    print(f"  Circle circumference:  {circle_length:.2f} m")
-    print(f"  Track width:           {TRACK_WIDTH} m")
-    
+
     # Create vehicle
     vehicle = create_vehicle_from_config(config)
-    
+
     # Solve for velocity profile
     result, t_lap = solve_qss(track, vehicle)
     v = result['v']
-    
+
     # Get timing breakdown
     timing = skidpad_time_from_single_circle(t_lap)
-    
+
     # Compute additional metrics
     metrics = compute_metrics(track, v, vehicle)
-    
+
+    # Print track info
+    print("\n  TRACK")
+    print(f"    Radius:          {SKIDPAD_CENTRE_RADIUS:.3f} m")
+    print(f"    Circumference:   {circle_length:.2f} m")
+    print(f"    Track width:     {TRACK_WIDTH} m")
+
     # Print results
-    print("\n" + "-" * 50)
-    print("RESULTS")
-    print("-" * 50)
-    print(f"\n  Timing:")
-    print(f"    Single circle time:  {timing['t_official']:.3f} s")
-    print(f"    Full run time:       {timing['t_full_run']:.3f} s (4 circles)")
-    print(f"\n  Performance:")
-    print(f"    Average speed:       {timing['avg_speed']:.2f} m/s ({timing['avg_speed']*3.6:.1f} km/h)")
-    print(f"    Max lateral accel:   {metrics['max_ay']:.2f} m/s² ({metrics['max_ay']/9.81:.2f} g)")
-    print(f"    Energy (1 circle):   {metrics['energy_consumed_kWh']*1000:.1f} Wh")
-    print("-" * 50 + "\n")
-    print("=" * 50 + "\n")
-    
+    print_subheader("SKIDPAD RESULTS")
+
+    print("\n  TIMING")
+    print(f"    Single circle:   {timing['t_official']:.3f} s")
+    print(f"    Full run (4x):   {timing['t_full_run']:.3f} s")
+
+    print("\n  PERFORMANCE")
+    print(f"    Avg speed:       {timing['avg_speed']:.2f} m/s  ({timing['avg_speed']*3.6:.1f} km/h)")
+    print(f"    Lat accel:       {metrics['max_ay']:.2f} m/s2  ({metrics['max_ay']/9.81:.2f} g)")
+    print(f"    Energy:          {metrics['energy_consumed_kWh']*1000:.1f} Wh")
+
     # Add timing to metrics for return
     metrics['t_official'] = timing['t_official']
     metrics['t_full_run'] = timing['t_full_run']
-    
+
     # Plot with velocity colouring
     plot_skidpad(track, v=v)
-    
+
     return metrics
 
 
 def run_autocross_simulation(config: dict):
     """Run the autocross simulation with lap time calculation and battery tracking."""
     from events.autocross_generator import (
-        build_standard_autocross, 
-        plot_autocross, 
+        build_standard_autocross,
+        plot_autocross,
         validate_autocross,
         MAX_TRACK_LENGTH
     )
-    from plots.plots import plot_battery_state, plot_soc_on_track
-    
-    print("\n" + "=" * 50)
-    print("AUTOCROSS SIMULATION")
-    print("=" * 50 + "\n")
-    
+
+    print_header("AUTOCROSS EVENT")
+
     # Build track
     track, metadata = build_standard_autocross()
-    
-    print(f"Track length: {track.s[-1]:.1f} m")
-    
+
     max_kappa = np.max(np.abs(track.kappa[track.kappa != 0]))
-    print(f"Min turn radius: {1/max_kappa:.2f} m")
-    print(f"Number of slalom cones: {len(metadata['slalom_cones_x'])}")
-    
+    min_radius = 1/max_kappa
+    n_cones = len(metadata['slalom_cones_x'])
+
     # Validate track
     validation = validate_autocross(track, metadata)
-    if validation["valid"]:
-        print("✓ Track passes all validation checks")
-    else:
-        print("✗ Track validation FAILED:")
-        for err in validation["errors"]:
-            print(f"  - {err}")
-    
+    track_valid = validation["valid"]
+    valid_symbol = "[OK]" if track_valid else "[FAIL]"
+
+    print("\n  TRACK CONFIGURATION")
+    print(f"    Length:          {track.s[-1]:.1f} m  (max {MAX_TRACK_LENGTH:.0f} m)")
+    print(f"    Min radius:      {min_radius:.2f} m")
+    print(f"    Slalom cones:    {n_cones}")
+    print(f"    Status:          {valid_symbol}")
+
+    # Print validation warnings/errors if any
     for warn in validation.get("warnings", []):
-        print(f"  Warning: {warn}")
-    
-    if track.s[-1] <= MAX_TRACK_LENGTH:
-        print(f"✓ Track length {track.s[-1]:.1f}m ≤ {MAX_TRACK_LENGTH}m maximum")
-    else:
-        print(f"✗ Track length {track.s[-1]:.1f}m exceeds {MAX_TRACK_LENGTH}m maximum")
-    
+        print(f"    Warning: {warn}")
+    if not validation["valid"]:
+        for err in validation["errors"]:
+            print(f"    Error: {err}")
+
     # Create vehicle
     vehicle = create_vehicle_from_config(config)
-    
+
     # Solve for velocity profile
-    result, t_lap = solve_qss(track, vehicle)
+    result, _ = solve_qss(track, vehicle)
     v = result['v']
-    
+
     # Compute metrics
     metrics = compute_metrics(track, v, vehicle)
-    
+
     # Print results
-    print("\n" + "-" * 50)
-    print("RESULTS")
-    print("-" * 50)
-    print(f"  Lap time:              {metrics['lap_time']:.3f} s")
-    print(f"  Average speed:         {metrics['avg_speed']:.2f} m/s ({metrics['avg_speed']*3.6:.1f} km/h)")
-    print(f"  Max speed:             {metrics['max_speed']:.2f} m/s ({metrics['max_speed']*3.6:.1f} km/h)")
-    print(f"  Min speed:             {metrics['min_speed']:.2f} m/s ({metrics['min_speed']*3.6:.1f} km/h)")
-    print(f"  Max longitudinal accel:{metrics['max_ax']:.2f} m/s² ({metrics['max_ax']/9.81:.2f} g)")
-    print(f"  Max braking decel:     {abs(metrics['min_ax']):.2f} m/s² ({abs(metrics['min_ax'])/9.81:.2f} g)")
-    print(f"  Max lateral accel:     {metrics['max_ay']:.2f} m/s² ({metrics['max_ay']/9.81:.2f} g)")
-    print(f"  Energy consumed:       {metrics['energy_consumed_kWh']*1000:.1f} Wh")
-    print("-" * 50 + "\n")
-    print("=" * 50 + "\n")
-    
-    # =========================================
-    # BATTERY VALIDATION
-    # =========================================
+    print_subheader("AUTOCROSS RESULTS")
+
+    print(f"\n  LAP TIME:          {metrics['lap_time']:.3f} s")
+
+    print("\n  SPEED                    m/s        km/h")
+    print(f"    Average:             {metrics['avg_speed']:>6.2f}      {metrics['avg_speed']*3.6:>6.1f}")
+    print(f"    Maximum:             {metrics['max_speed']:>6.2f}      {metrics['max_speed']*3.6:>6.1f}")
+    print(f"    Minimum:             {metrics['min_speed']:>6.2f}      {metrics['min_speed']*3.6:>6.1f}")
+
+    print("\n  ACCELERATION            m/s2          g")
+    print(f"    Max longitudinal:    {metrics['max_ax']:>6.2f}      {metrics['max_ax']/9.81:>6.2f}")
+    print(f"    Max braking:         {abs(metrics['min_ax']):>6.2f}      {abs(metrics['min_ax'])/9.81:>6.2f}")
+    print(f"    Max lateral:         {metrics['max_ay']:>6.2f}      {metrics['max_ay']/9.81:>6.2f}")
+
+    print(f"\n  ENERGY:            {metrics['energy_consumed_kWh']*1000:.1f} Wh")
+
+    # Store data for battery analysis (done later)
     if vehicle.battery is not None:
-        print("\n" + "=" * 50)
-        print("BATTERY ANALYSIS")
-        print("=" * 50 + "\n")
-        
-        # Validate battery capacity
         battery_validation = validate_battery_capacity(track, v, vehicle)
-        
-        # Print battery results
-        if battery_validation.sufficient:
-            print(f"  ✓ Battery capacity SUFFICIENT")
-        else:
-            print(f"  ✗ Battery capacity INSUFFICIENT")
-        
-        print(f"\n  Battery Status:")
-        print(f"    Initial SoC:         {vehicle.battery.initial_soc:.1%}")
-        print(f"    Final SoC:           {battery_validation.final_soc:.1%}")
-        print(f"    Minimum SoC:         {battery_validation.min_soc:.1%} (at {battery_validation.min_soc_distance:.1f}m)")
-        print(f"    Min allowed SoC:     {vehicle.battery.min_soc:.1%}")
-        
-        print(f"\n  Energy:")
-        print(f"    Capacity:            {vehicle.battery.capacity_kWh:.2f} kWh ({vehicle.battery.capacity_kWh*1000:.0f} Wh)")
-        usable = vehicle.battery.capacity_kWh * (vehicle.battery.initial_soc - vehicle.battery.min_soc)
-        print(f"    Usable capacity:     {usable:.2f} kWh ({usable*1000:.0f} Wh)")
-        print(f"    Energy consumed:     {battery_validation.total_energy_kWh*1000:.1f} Wh")
-        print(f"    Remaining usable:    {(usable - battery_validation.total_energy_kWh)*1000:.1f} Wh")
-        
-        print(f"\n  Power:")
-        print(f"    Peak discharge:      {battery_validation.peak_power_kW:.1f} kW")
-        print(f"    Average discharge:   {battery_validation.avg_power_kW:.1f} kW")
-        
-        # Print warnings and errors
-        if battery_validation.warnings:
-            print(f"\n  Warnings:")
-            for warn in battery_validation.warnings:
-                print(f"    ⚠ {warn}")
-        
-        if battery_validation.errors:
-            print(f"\n  Errors:")
-            for err in battery_validation.errors:
-                print(f"    ✗ {err}")
-        
-        # Calculate required capacity if insufficient
-        if not battery_validation.sufficient:
-            req_capacity = required_battery_capacity(track, v, vehicle, safety_margin=0.2)
-            print(f"\n  Recommended minimum capacity: {req_capacity:.2f} kWh")
-        
-        print("=" * 50 + "\n")
-        
-        # Store battery results in metrics
         metrics['battery_validation'] = battery_validation
         metrics['battery_sufficient'] = battery_validation.sufficient
         metrics['final_soc'] = battery_validation.final_soc
         metrics['min_soc'] = battery_validation.min_soc
-        
-        # Simulate battery for plotting
-        battery_state = simulate_battery(track, v, vehicle)
-        
-        # Plot battery state
-        plot_battery_state(track, battery_state, vehicle, battery_validation,
-                          title="Autocross Battery Analysis (No Regen)")
-        
-        # Plot SoC on track
-        plot_soc_on_track(track, battery_state, vehicle, title="Autocross - SoC Map")
-    
+        metrics['track'] = track
+        metrics['v'] = v
+        metrics['vehicle'] = vehicle
+
     # Plot with velocity colouring
     plot_autocross(track, v=v, metadata=metadata)
-    
+
     return metrics
+
+
+def print_battery_analysis(metrics: dict, config: dict):
+    """Print battery analysis results and show plots."""
+    from plots.plots import plot_battery_state
+
+    if 'battery_validation' not in metrics:
+        return
+
+    battery_validation = metrics['battery_validation']
+    vehicle = metrics['vehicle']
+    track = metrics['track']
+    v = metrics['v']
+
+    usable = vehicle.battery.capacity_kWh * (vehicle.battery.initial_soc - vehicle.battery.min_soc)
+    status_text = "[OK] SUFFICIENT" if battery_validation.sufficient else "[FAIL] INSUFFICIENT"
+
+    print_subheader("BATTERY ANALYSIS")
+    print(f"\n  STATUS: {status_text}")
+
+    print("\n  STATE OF CHARGE")
+    print(f"    Initial:         {vehicle.battery.initial_soc:.1%}")
+    print(f"    Final:           {battery_validation.final_soc:.1%}")
+    print(f"    Minimum:         {battery_validation.min_soc:.1%}  (at {battery_validation.min_soc_distance:.1f} m)")
+    print(f"    Min allowed:     {vehicle.battery.min_soc:.1%}")
+
+    print("\n  ENERGY                   kWh          Wh")
+    print(f"    Capacity:            {vehicle.battery.capacity_kWh:>6.2f}      {vehicle.battery.capacity_kWh*1000:>6.0f}")
+    print(f"    Usable:              {usable:>6.2f}      {usable*1000:>6.0f}")
+    print(f"    Consumed:            {battery_validation.total_energy_kWh:>6.4f}      {battery_validation.total_energy_kWh*1000:>6.1f}")
+    print(f"    Remaining:           {usable - battery_validation.total_energy_kWh:>6.2f}      {(usable - battery_validation.total_energy_kWh)*1000:>6.1f}")
+
+    print("\n  POWER")
+    print(f"    Peak discharge:      {battery_validation.peak_power_kW:.1f} kW")
+    print(f"    Average discharge:   {battery_validation.avg_power_kW:.1f} kW")
+
+    # Print warnings and errors
+    for warn in battery_validation.warnings:
+        print(f"\n    Warning: {warn}")
+    for err in battery_validation.errors:
+        print(f"\n    Error: {err}")
+
+    if not battery_validation.sufficient:
+        req_capacity = required_battery_capacity(track, v, vehicle, safety_margin=0.2)
+        print(f"\n  Recommended minimum capacity: {req_capacity:.2f} kWh")
+
+    # Simulate battery for plotting
+    battery_state = simulate_battery(track, v, vehicle)
+
+    # Plot battery state
+    plot_battery_state(track, battery_state, vehicle, battery_validation,
+                      title="Autocross Battery Analysis (No Regen)")
+
+    # SoC track map disabled - redundant since min SoC is at track end
+    # plot_soc_on_track(track, battery_state, vehicle, title="Autocross - SoC Map")
 
 
 def main():
     """Main entry point with interactive menu."""
-    
-    print("\n" + "=" * 50)
-    print("    BAROx FORMULA STUDENT SIMULATION")
-    print("=" * 50 + "\n")
-    
-    # =========================================
+
+    # Banner
+    print("\n" + "=" * 60)
+    print("  BAROx - Formula Student Lap Time Simulator")
+    print("  QSS Point-Mass Model")
+    print("=" * 60)
+
     # Question 1: Select simulation type
-    # =========================================
     simulation_question = [
         inquirer.List('simulation',
-                      message="What simulation would you like to run?",
+                      message="Select simulation",
                       choices=[
                           ('Both (Autocross + Skidpad)', 'both'),
-                          ('Autocross (Sprint)', 'autocross'),
-                          ('Skidpad', 'skidpad'),
+                          ('Autocross only', 'autocross'),
+                          ('Skidpad only', 'skidpad'),
                       ],
                       ),
     ]
     simulation_answer = inquirer.prompt(simulation_question)
-    
+
     if simulation_answer is None:
-        print("Cancelled.")
+        print("\n  Cancelled.\n")
         return
-    
+
     simulation_type = simulation_answer['simulation']
-    
-    # =========================================
+
     # Question 2: Select vehicle parameters
-    # =========================================
     vehicle_question = [
         inquirer.List('vehicle_params',
-                      message="Vehicle Parameters:",
+                      message="Vehicle parameters",
                       choices=[
                           ('Standard (default.yaml)', 'standard'),
-                          ('Custom', 'custom'),
+                          ('Custom (enter values)', 'custom'),
                       ],
                       ),
     ]
     vehicle_answer = inquirer.prompt(vehicle_question)
-    
+
     if vehicle_answer is None:
-        print("Cancelled.")
+        print("\n  Cancelled.\n")
         return
-    
+
     # Load or get vehicle parameters
     defaults = load_standard_vehicle()
-    
+
     if vehicle_answer['vehicle_params'] == 'standard':
         config = defaults
-        print("\nUsing standard vehicle parameters from default.yaml")
+        print("\n  Using standard vehicle parameters from default.yaml")
     else:
         config = get_custom_vehicle_params(defaults)
-    
+
     # Print the vehicle parameters being used
     print_vehicle_params(config)
-    
-    # =========================================
+
     # Run selected simulation(s)
-    # =========================================
+    # Order: Autocross -> Skidpad -> Battery Analysis -> Summary
     results = {}
-    
+
     if simulation_type == 'both':
+        # 1. Autocross results
         results['autocross'] = run_autocross_simulation(config)
+
+        # 2. Skidpad results
         results['skidpad'] = run_skidpad_simulation(config)
-        
-        # Print combined summary
-        print("\n" + "=" * 50)
-        print("    COMBINED RESULTS SUMMARY")
-        print("=" * 50)
-        print(f"  Autocross lap time:    {results['autocross']['lap_time']:.3f} s")
-        print(f"  Skidpad lap time:      {results['skidpad']['lap_time']:.3f} s")
+
+        # 3. Battery analysis (after both events)
+        if 'battery_validation' in results['autocross']:
+            print_battery_analysis(results['autocross'], config)
+
+        # 4. Summary
+        print_header("SUMMARY")
+        print(f"\n  Autocross lap time:    {results['autocross']['lap_time']:.3f} s")
+        print(f"  Skidpad lap time:      {results['skidpad']['t_official']:.3f} s")
         if 'battery_sufficient' in results['autocross']:
-            status = "✓ Yes" if results['autocross']['battery_sufficient'] else "✗ No"
+            status = "[OK]" if results['autocross']['battery_sufficient'] else "[FAIL]"
             print(f"  Battery sufficient:    {status}")
-        print("=" * 50)
-        
+
     elif simulation_type == 'autocross':
+        # 1. Autocross results
         results['autocross'] = run_autocross_simulation(config)
+
+        # 2. Battery analysis
+        if 'battery_validation' in results['autocross']:
+            print_battery_analysis(results['autocross'], config)
+
     elif simulation_type == 'skidpad':
         results['skidpad'] = run_skidpad_simulation(config)
-    
-    print("\n" + "=" * 50)
-    print("    SIMULATION COMPLETE")
-    print("=" * 50 + "\n")
-    
+
+    print("\n" + "=" * 60)
+    print("  SIMULATION COMPLETE")
+    print("=" * 60 + "\n")
+
     return results
 
 

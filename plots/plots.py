@@ -174,12 +174,6 @@ def plot_soc_on_track(track: Track, state: BatteryState, vehicle: VehicleParams,
     ax.plot(track.x[0], track.y[0], 'go', markersize=15, label='Start', zorder=10)
     ax.plot(track.x[-1], track.y[-1], 'rs', markersize=15, label='Finish', zorder=10)
     
-    # Mark minimum SoC point
-    min_idx = np.argmin(state.soc)
-    ax.scatter([track.x[min_idx]], [track.y[min_idx]], c='orange', s=200, 
-               marker='v', zorder=15, edgecolors='black', linewidths=2,
-               label=f'Min SoC ({state.soc[min_idx]:.1%})')
-    
     ax.set_aspect('equal')
     ax.set_xlabel('x [m]')
     ax.set_ylabel('y [m]')
