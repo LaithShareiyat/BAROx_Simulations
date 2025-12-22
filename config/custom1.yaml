@@ -1,0 +1,24 @@
+vehicle:
+  mass_kg: 500
+  g: 9.81
+  Crr: 0.07
+
+aero:
+  rho: 2.0
+  Cd: 1.1     # Drag coefficient [-]
+  Cl: 1.5     # Lift coefficient [-] (downforce is positive)
+  A: 1.0      # Frontal area [m²]
+
+tyre:
+  mu: 1.6
+
+powertrain:
+  P_max_kW: 80
+  Fx_max_N: 3900
+
+battery:
+  capacity_kWh: 2         # Typical FS EV battery (5-7 kWh)
+  initial_soc: 1.0        # Start fully charged
+  min_soc: 0.1            # 10% minimum (safety factor)
+  max_discharge_kW: 80    # Match motor power
+  eta_discharge: 0.95     # Battery discharge efficiency (safety factor)

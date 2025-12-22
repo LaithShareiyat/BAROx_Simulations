@@ -918,10 +918,22 @@ class ResultsPanel(ttk.Frame):
         fig.subplots_adjust(top=0.93)
         self.battery_canvas.draw()
 
-    def update_battery_sweep_plot(self, autocross_data: Dict[str, Any], config: dict):
+    def update_battery_sweep_plot(self, autocross_data: Dict[str, Any] = None, config: dict = None):
         """Update the battery capacity sweep plot."""
-        sweep_result = autocross_data.get('battery_sweep')
+        fig = self.sweep_canvas.get_figure()
+        fig.clear()
+
+        # Check if we have sweep data
+        sweep_result = autocross_data.get('battery_sweep') if autocross_data else None
         if sweep_result is None:
+            # No battery data available
+            ax = fig.add_subplot(111)
+            ax.text(0.5, 0.5, 'No battery data available\n(Battery analysis disabled)',
+                    ha='center', va='center', fontsize=12, color='gray',
+                    transform=ax.transAxes)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            self.sweep_canvas.draw()
             return
 
         track = autocross_data.get('track')
