@@ -44,6 +44,14 @@ def create_vehicle_from_config(config: dict) -> VehicleParams:
             min_soc=config['battery'].get('min_soc', 0.1),
             max_discharge_kW=config['battery'].get('max_discharge_kW', 80.0),
             eta_discharge=config['battery'].get('eta_discharge', 0.95),
+            # Current limiting (FS 2025 rules)
+            nominal_voltage_V=config['battery'].get('nominal_voltage_V', 400.0),
+            max_current_A=config['battery'].get('max_current_A', 500.0),
+            # Regenerative braking parameters
+            regen_enabled=config['battery'].get('regen_enabled', False),
+            eta_regen=config['battery'].get('eta_regen', 0.85),
+            max_regen_kW=config['battery'].get('max_regen_kW', 50.0),
+            regen_capture_percent=config['battery'].get('regen_capture_percent', 100.0),
         )
     
     return VehicleParams(
@@ -122,27 +130,65 @@ def get_custom_vehicle_params(defaults: dict) -> dict:
     # Battery parameters
     print("\n--- Battery ---")
     battery_defaults = defaults.get('battery', {
-        'capacity_kWh': 6.5,
+        'capacity_kWh': 6.0,
         'initial_soc': 1.0,
         'min_soc': 0.1,
-        'max_discharge_kW': 80.0,
+        'max_discharge_kW': 160.0,  # Match 2 × 80kW motors
         'eta_discharge': 0.95,
+        'nominal_voltage_V': 400.0,
+        'max_current_A': 500.0,
+        'regen_enabled': False,
+        'eta_regen': 0.85,
+        'max_regen_kW': 50.0,
+        'regen_capture_percent': 100.0,
     })
     questions = [
-        inquirer.Text('capacity_kWh', 
+        inquirer.Text('capacity_kWh',
                       message=f"Battery capacity [kWh] ({battery_defaults['capacity_kWh']})",
                       default=str(battery_defaults['capacity_kWh'])),
-        inquirer.Text('initial_soc', 
+        inquirer.Text('initial_soc',
                       message=f"Initial SoC [0-1] ({battery_defaults['initial_soc']})",
                       default=str(battery_defaults['initial_soc'])),
-        inquirer.Text('min_soc', 
+        inquirer.Text('min_soc',
                       message=f"Minimum SoC [0-1] ({battery_defaults['min_soc']})",
                       default=str(battery_defaults['min_soc'])),
-        inquirer.Text('max_discharge_kW', 
+        inquirer.Text('max_discharge_kW',
                       message=f"Max discharge power [kW] ({battery_defaults['max_discharge_kW']})",
                       default=str(battery_defaults['max_discharge_kW'])),
+        inquirer.Text('nominal_voltage_V',
+                      message=f"Nominal pack voltage [V] ({battery_defaults.get('nominal_voltage_V', 400)})",
+                      default=str(battery_defaults.get('nominal_voltage_V', 400))),
+        inquirer.Text('max_current_A',
+                      message=f"Max current [A] (FS rule: 500) ({battery_defaults.get('max_current_A', 500)})",
+                      default=str(battery_defaults.get('max_current_A', 500))),
     ]
     battery_answers = inquirer.prompt(questions)
+
+    # Regenerative braking option
+    print("\n--- Regenerative Braking ---")
+    regen_question = [
+        inquirer.Confirm('regen_enabled',
+                         message="Enable regenerative braking?",
+                         default=battery_defaults.get('regen_enabled', False)),
+    ]
+    regen_answer = inquirer.prompt(regen_question)
+    regen_enabled = regen_answer['regen_enabled']
+
+    # If regen enabled, prompt for regen parameters
+    regen_answers = {}
+    if regen_enabled:
+        regen_questions = [
+            inquirer.Text('eta_regen',
+                          message=f"Regen efficiency [0-1] ({battery_defaults.get('eta_regen', 0.85)})",
+                          default=str(battery_defaults.get('eta_regen', 0.85))),
+            inquirer.Text('max_regen_kW',
+                          message=f"Max regen power [kW] ({battery_defaults.get('max_regen_kW', 50.0)})",
+                          default=str(battery_defaults.get('max_regen_kW', 50.0))),
+            inquirer.Text('regen_capture_percent',
+                          message=f"Braking capture [%] ({battery_defaults.get('regen_capture_percent', 100.0)})",
+                          default=str(battery_defaults.get('regen_capture_percent', 100.0))),
+        ]
+        regen_answers = inquirer.prompt(regen_questions)
     
     # Build config dict
     config = {
@@ -170,9 +216,17 @@ def get_custom_vehicle_params(defaults: dict) -> dict:
             'min_soc': float(battery_answers['min_soc']),
             'max_discharge_kW': float(battery_answers['max_discharge_kW']),
             'eta_discharge': battery_defaults.get('eta_discharge', 0.95),
+            # Current limiting (FS 2025 rules)
+            'nominal_voltage_V': float(battery_answers['nominal_voltage_V']),
+            'max_current_A': float(battery_answers['max_current_A']),
+            # Regenerative braking
+            'regen_enabled': regen_enabled,
+            'eta_regen': float(regen_answers.get('eta_regen', battery_defaults.get('eta_regen', 0.85))) if regen_enabled else 0.85,
+            'max_regen_kW': float(regen_answers.get('max_regen_kW', battery_defaults.get('max_regen_kW', 50.0))) if regen_enabled else 50.0,
+            'regen_capture_percent': float(regen_answers.get('regen_capture_percent', battery_defaults.get('regen_capture_percent', 100.0))) if regen_enabled else 100.0,
         }
     }
-    
+
     return config
 
 
@@ -224,6 +278,24 @@ def print_vehicle_params(config: dict):
         print(f"    Min SoC:           {config['battery']['min_soc']:.0%}")
         print(f"    Max discharge:     {config['battery']['max_discharge_kW']} kW")
         print(f"    Efficiency:        {config['battery'].get('eta_discharge', 0.95):.0%}")
+
+        # Current limiting (FS 2025 rules)
+        nominal_v = config['battery'].get('nominal_voltage_V', 400)
+        max_current = config['battery'].get('max_current_A', 500)
+        power_from_current = (nominal_v * max_current) / 1000
+        print(f"\n  CURRENT LIMIT (FS Rules)")
+        print(f"    Nominal voltage:   {nominal_v} V")
+        print(f"    Max current:       {max_current} A")
+        print(f"    Power limit (V×I): {power_from_current:.1f} kW")
+
+        # Regenerative braking
+        regen_enabled = config['battery'].get('regen_enabled', False)
+        regen_status = "ENABLED" if regen_enabled else "DISABLED"
+        print(f"\n  REGENERATIVE BRAKING: {regen_status}")
+        if regen_enabled:
+            print(f"    Regen efficiency:  {config['battery'].get('eta_regen', 0.85):.0%}")
+            print(f"    Max regen power:   {config['battery'].get('max_regen_kW', 50.0)} kW")
+            print(f"    Braking capture:   {config['battery'].get('regen_capture_percent', 100.0):.0f}%")
 
 
 def compute_metrics(track, v: np.ndarray, vehicle: VehicleParams) -> dict:
@@ -442,9 +514,10 @@ def print_battery_analysis(metrics: dict, config: dict):
     # Simulate battery for plotting
     battery_state = simulate_battery(track, v, vehicle)
 
-    # Plot battery state
+    # Plot battery state with appropriate title
+    regen_status = "With Regen" if vehicle.battery.regen_enabled else "No Regen"
     plot_battery_state(track, battery_state, vehicle, battery_validation,
-                      title="Autocross Battery Analysis (No Regen)")
+                      title=f"Autocross Battery Analysis ({regen_status})")
 
     # SoC track map disabled - redundant since min SoC is at track end
     # plot_soc_on_track(track, battery_state, vehicle, title="Autocross - SoC Map")

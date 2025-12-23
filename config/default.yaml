@@ -19,12 +19,20 @@ tyre:
   mu: 1.6
 
 powertrain:
-  P_max_kW: 80
-  Fx_max_N: 3900
+  P_max_kW: 160           # 2 × 80kW rear wheel drive motors
+  Fx_max_N: 3900          # Traction-limited by rear tyre grip
 
 battery:
   capacity_kWh: 6         # Typical FS EV battery (5-7 kWh)
   initial_soc: 1.0        # Start fully charged
   min_soc: 0.1            # 10% minimum (safety factor)
-  max_discharge_kW: 80    # Match motor power
+  max_discharge_kW: 160   # Match total motor power (2 × 80kW)
   eta_discharge: 0.95     # Battery discharge efficiency (safety factor)
+  # Current limiting (FS 2025 rules)
+  nominal_voltage_V: 400  # Nominal pack voltage [V]
+  max_current_A: 500      # Maximum discharge current [A] (FS rules limit)
+  # Regenerative braking
+  regen_enabled: false    # Disabled by default for backwards compatibility
+  eta_regen: 0.85         # Regen efficiency (motor + battery charging losses)
+  max_regen_kW: 50        # Maximum charging power during regen [kW]
+  regen_capture_percent: 100  # % of braking using regen vs friction brakes [0-100]
