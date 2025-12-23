@@ -2,6 +2,12 @@ vehicle:
   mass_kg: 250
   g: 9.81
   Crr: 0.015
+  # Mass breakdown (for custom configuration)
+  mass_chassis_aero_kg: 75        # 30% - Chassis & aero package
+  mass_suspension_tyres_kg: 50    # 20% - Suspension & tyres
+  mass_powertrain_kg: 45          # 18% - Powertrain (motor, gearbox, etc.)
+  mass_battery_kg: 55             # 22% - Battery systems
+  mass_electronics_kg: 25         # 10% - Electronics & other
 
 aero:
   rho: 1.225

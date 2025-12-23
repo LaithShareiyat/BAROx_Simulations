@@ -82,7 +82,15 @@ class ControlPanel(ttk.Frame):
     def _get_fallback_defaults(self) -> dict:
         """Fallback default values if config file not found."""
         return {
-            'vehicle': {'mass_kg': 250, 'g': 9.81, 'Crr': 0.015},
+            'vehicle': {
+                'mass_kg': 250, 'g': 9.81, 'Crr': 0.015,
+                # Mass breakdown (percentages of total mass)
+                'mass_chassis_aero_kg': 75,      # 30%
+                'mass_suspension_tyres_kg': 50,  # 20%
+                'mass_powertrain_kg': 45,        # 18%
+                'mass_battery_kg': 55,           # 22%
+                'mass_electronics_kg': 25,       # 10%
+            },
             'aero': {'rho': 1.225, 'Cd': 1.1, 'Cl': 1.5, 'A': 1.0},
             'tyre': {'mu': 1.6},
             'powertrain': {'P_max_kW': 80, 'Fx_max_N': 3900},
@@ -133,12 +141,8 @@ class ControlPanel(ttk.Frame):
         self.param_entries: Dict[str, Dict[str, tk.StringVar]] = {}
         self.param_widgets: Dict[str, Dict[str, ttk.Entry]] = {}  # Store entry widgets for enabling/disabling
 
-        # Vehicle parameters
-        self._create_param_section('VEHICLE', 'vehicle', [
-            ('mass_kg', 'Mass', 'kg'),
-            ('g', 'Gravity', 'm/s²'),
-            ('Crr', 'Rolling Resistance', ''),
-        ])
+        # Vehicle parameters (with mass breakdown for custom mode)
+        self._create_vehicle_section()
 
         # Aero parameters
         self._create_param_section('AERODYNAMICS', 'aero', [
@@ -161,6 +165,159 @@ class ControlPanel(ttk.Frame):
 
         # Battery parameters with enable checkbox
         self._create_battery_section()
+
+    def _create_vehicle_section(self):
+        """Create vehicle parameters section with mass breakdown for custom mode."""
+        frame = ttk.LabelFrame(self.scrollable_frame, text="VEHICLE", padding=(10, 5))
+        frame.pack(fill='x', padx=10, pady=5)
+        self.vehicle_frame = frame
+
+        self.param_entries['vehicle'] = {}
+        self.param_widgets['vehicle'] = {}
+        defaults = self.default_config.get('vehicle', {})
+
+        # Standard mass field (shown in standard mode)
+        self.mass_standard_widgets = []
+        row = 0
+        
+        lbl = ttk.Label(frame, text='Total Mass', width=16, anchor='w')
+        lbl.grid(row=row, column=0, sticky='w', padx=5, pady=2)
+        self.mass_standard_widgets.append(lbl)
+
+        var = tk.StringVar(value=str(defaults.get('mass_kg', 250)))
+        entry = ttk.Entry(frame, textvariable=var, width=10)
+        entry.grid(row=row, column=1, sticky='w', padx=5, pady=2)
+        self.mass_standard_widgets.append(entry)
+
+        unit_lbl = ttk.Label(frame, text='kg', foreground='gray', width=6)
+        unit_lbl.grid(row=row, column=2, sticky='w', pady=2)
+        self.mass_standard_widgets.append(unit_lbl)
+
+        self.param_entries['vehicle']['mass_kg'] = var
+        self.param_widgets['vehicle']['mass_kg'] = entry
+        self.mass_standard_entry = entry
+        self.mass_standard_var = var
+
+        # Mass breakdown fields (shown in custom mode)
+        self.mass_breakdown_widgets = []
+        self.mass_breakdown_vars = {}
+        self.mass_breakdown_entries = {}
+        
+        mass_components = [
+            ('mass_chassis_aero_kg', 'Chassis & Aero', 75),
+            ('mass_suspension_tyres_kg', 'Suspension & Tyres', 50),
+            ('mass_powertrain_kg', 'Powertrain', 45),
+            ('mass_battery_kg', 'Battery Systems', 55),
+            ('mass_electronics_kg', 'Electronics & Other', 25),
+        ]
+
+        for i, (key, label, default) in enumerate(mass_components):
+            comp_row = row + 1 + i
+            default_val = defaults.get(key, default)
+
+            lbl = ttk.Label(frame, text=f'  {label}', width=16, anchor='w')
+            lbl.grid(row=comp_row, column=0, sticky='w', padx=5, pady=1)
+            self.mass_breakdown_widgets.append(lbl)
+
+            var = tk.StringVar(value=str(default_val))
+            entry = ttk.Entry(frame, textvariable=var, width=10)
+            entry.grid(row=comp_row, column=1, sticky='w', padx=5, pady=1)
+            entry.bind('<KeyRelease>', self._update_total_mass)
+            self.mass_breakdown_widgets.append(entry)
+
+            unit_lbl = ttk.Label(frame, text='kg', foreground='gray', width=6)
+            unit_lbl.grid(row=comp_row, column=2, sticky='w', pady=1)
+            self.mass_breakdown_widgets.append(unit_lbl)
+
+            self.param_entries['vehicle'][key] = var
+            self.param_widgets['vehicle'][key] = entry
+            self.mass_breakdown_vars[key] = var
+            self.mass_breakdown_entries[key] = entry
+
+        # Total mass display (read-only, shown in custom mode)
+        total_row = row + len(mass_components) + 1
+        
+        sep = ttk.Separator(frame, orient='horizontal')
+        sep.grid(row=total_row, column=0, columnspan=3, sticky='ew', padx=5, pady=3)
+        self.mass_breakdown_widgets.append(sep)
+        
+        total_row += 1
+        total_lbl = ttk.Label(frame, text='Total Mass', width=16, anchor='w', font=('TkDefaultFont', 9, 'bold'))
+        total_lbl.grid(row=total_row, column=0, sticky='w', padx=5, pady=2)
+        self.mass_breakdown_widgets.append(total_lbl)
+
+        self.total_mass_var = tk.StringVar(value='250')
+        total_entry = ttk.Entry(frame, textvariable=self.total_mass_var, width=10, state='readonly')
+        total_entry.grid(row=total_row, column=1, sticky='w', padx=5, pady=2)
+        self.mass_breakdown_widgets.append(total_entry)
+
+        total_unit = ttk.Label(frame, text='kg', foreground='gray', width=6)
+        total_unit.grid(row=total_row, column=2, sticky='w', pady=2)
+        self.mass_breakdown_widgets.append(total_unit)
+
+        # Other vehicle parameters (g, Crr)
+        other_params = [
+            ('g', 'Gravity', 'm/s²'),
+            ('Crr', 'Rolling Resistance', ''),
+        ]
+        
+        self.vehicle_other_widgets = []
+        other_start_row = total_row + 1
+        
+        for i, (key, label, unit) in enumerate(other_params):
+            param_row = other_start_row + i
+            default_val = defaults.get(key, 0)
+
+            lbl = ttk.Label(frame, text=label, width=16, anchor='w')
+            lbl.grid(row=param_row, column=0, sticky='w', padx=5, pady=2)
+            self.vehicle_other_widgets.append(lbl)
+
+            var = tk.StringVar(value=str(default_val))
+            entry = ttk.Entry(frame, textvariable=var, width=10)
+            entry.grid(row=param_row, column=1, sticky='w', padx=5, pady=2)
+            self.vehicle_other_widgets.append(entry)
+
+            if unit:
+                unit_lbl = ttk.Label(frame, text=unit, foreground='gray', width=6)
+                unit_lbl.grid(row=param_row, column=2, sticky='w', pady=2)
+                self.vehicle_other_widgets.append(unit_lbl)
+
+            self.param_entries['vehicle'][key] = var
+            self.param_widgets['vehicle'][key] = entry
+
+        # Initially hide mass breakdown (standard mode)
+        self._toggle_mass_breakdown(show_breakdown=False)
+
+    def _toggle_mass_breakdown(self, show_breakdown: bool):
+        """Show/hide mass breakdown fields based on mode."""
+        if show_breakdown:
+            # Hide standard mass field
+            for widget in self.mass_standard_widgets:
+                widget.grid_remove()
+            # Show breakdown fields
+            for widget in self.mass_breakdown_widgets:
+                widget.grid()
+            # Update total
+            self._update_total_mass()
+        else:
+            # Show standard mass field
+            for widget in self.mass_standard_widgets:
+                widget.grid()
+            # Hide breakdown fields
+            for widget in self.mass_breakdown_widgets:
+                widget.grid_remove()
+
+    def _update_total_mass(self, event=None):
+        """Calculate and display total mass from components."""
+        total = 0
+        for key, var in self.mass_breakdown_vars.items():
+            try:
+                total += float(var.get())
+            except ValueError:
+                pass
+        self.total_mass_var.set(f'{total:.1f}')
+        # Also update the main mass_kg variable
+        self.mass_standard_var.set(f'{total:.1f}')
 
     def _create_param_section(self, title: str, section: str, params: list):
         """Create a parameter section with labeled entries."""
@@ -289,9 +446,15 @@ class ControlPanel(ttk.Frame):
         is_custom = self.config_var.get() == 'custom'
         state = 'normal' if is_custom else 'disabled'
 
+        # Toggle mass breakdown view
+        self._toggle_mass_breakdown(show_breakdown=is_custom)
+
         # Update all parameter entry widgets
         for section, widgets in self.param_widgets.items():
             for key, entry in widgets.items():
+                # Skip mass breakdown entries in standard mode (they're hidden)
+                if not is_custom and key.startswith('mass_') and key != 'mass_kg':
+                    continue
                 entry.configure(state=state)
 
         # Update battery widgets (entries only)
@@ -363,6 +526,18 @@ class ControlPanel(ttk.Frame):
                     if key in config[section]:
                         var.set(str(config[section][key]))
 
+        # If mass breakdown values aren't in config, calculate from total mass
+        if 'vehicle' in config:
+            total_mass = config['vehicle'].get('mass_kg', 250)
+            if 'mass_chassis_aero_kg' not in config['vehicle']:
+                # Apply default ratios
+                self.mass_breakdown_vars['mass_chassis_aero_kg'].set(str(round(total_mass * 0.30)))
+                self.mass_breakdown_vars['mass_suspension_tyres_kg'].set(str(round(total_mass * 0.20)))
+                self.mass_breakdown_vars['mass_powertrain_kg'].set(str(round(total_mass * 0.18)))
+                self.mass_breakdown_vars['mass_battery_kg'].set(str(round(total_mass * 0.22)))
+                self.mass_breakdown_vars['mass_electronics_kg'].set(str(round(total_mass * 0.10)))
+            self._update_total_mass()
+
         # Handle battery enabled state
         if 'battery' in config:
             self.battery_enabled.set(config['battery'].get('enabled', True))
@@ -376,6 +551,7 @@ class ControlPanel(ttk.Frame):
     def get_config(self) -> dict:
         """Get current configuration as a dictionary."""
         config = {}
+        is_custom = self.config_var.get() == 'custom'
 
         for section, params in self.param_entries.items():
             config[section] = {}
@@ -389,6 +565,13 @@ class ControlPanel(ttk.Frame):
                         config[section][key] = int(val) if val.isdigit() else float(val)
                 except ValueError:
                     config[section][key] = var.get()
+
+        # In custom mode, calculate total mass from components
+        if is_custom:
+            total_mass = 0
+            for key in self.mass_breakdown_vars:
+                total_mass += config['vehicle'].get(key, 0)
+            config['vehicle']['mass_kg'] = total_mass
 
         # Add battery enabled flag
         config['battery']['enabled'] = self.battery_enabled.get()
