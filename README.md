@@ -7,7 +7,7 @@
 ![BAROx Logo](resources/BAROx_Logo.png)
 
 University of Oxford 
- 
+
 MEng Engineering Science
 
 3rd Year Design Project  
