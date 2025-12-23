@@ -28,12 +28,25 @@ class EVPowertrainMVP:
 
 @dataclass(frozen=True)
 class BatteryParams:
-    """Battery parameters for energy tracking (no regen)."""
+    """Battery parameters for energy tracking with optional regenerative braking."""
     capacity_kWh: float             # Total battery capacity [kWh]
     initial_soc: float = 1.0        # Initial state of charge [0-1]
     min_soc: float = 0.1            # Minimum allowed SoC [0-1] (safety margin)
     max_discharge_kW: float = 80.0  # Maximum discharge power [kW]
     eta_discharge: float = 0.95     # Battery discharge efficiency
+    # Current limiting (FS 2025 rules: 500A max)
+    nominal_voltage_V: float = 400.0  # Nominal pack voltage [V]
+    max_current_A: float = 500.0      # Maximum discharge current [A] (FS rules limit)
+    # Regenerative braking parameters
+    regen_enabled: bool = False     # Enable regenerative braking
+    eta_regen: float = 0.85         # Regen efficiency (motor + battery charging)
+    max_regen_kW: float = 50.0      # Maximum regen charging power [kW]
+    regen_capture_percent: float = 100.0  # % of braking that uses regen vs friction [0-100]
+
+    @property
+    def max_power_from_current_kW(self) -> float:
+        """Maximum power limited by current: P = V × I [kW]"""
+        return (self.nominal_voltage_V * self.max_current_A) / 1000.0
 
 @dataclass(frozen=True)
 class VehicleParams:

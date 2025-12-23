@@ -167,6 +167,14 @@ class BAROxGUI:
                 min_soc=config['battery']['min_soc'],
                 max_discharge_kW=config['battery']['max_discharge_kW'],
                 eta_discharge=config['battery'].get('eta_discharge', 0.95),
+                # Current limiting (FS 2025 rules)
+                nominal_voltage_V=config['battery'].get('nominal_voltage_V', 400.0),
+                max_current_A=config['battery'].get('max_current_A', 500.0),
+                # Regenerative braking parameters
+                regen_enabled=config['battery'].get('regen_enabled', False),
+                eta_regen=config['battery'].get('eta_regen', 0.85),
+                max_regen_kW=config['battery'].get('max_regen_kW', 50.0),
+                regen_capture_percent=config['battery'].get('regen_capture_percent', 100.0),
             )
 
         return VehicleParams(
@@ -448,6 +456,12 @@ class BAROxGUI:
             lines.append(f"Battery Capacity: {config['battery']['capacity_kWh']} kWh")
             lines.append(f"Initial SoC: {config['battery']['initial_soc']*100:.0f}%")
             lines.append(f"Min SoC: {config['battery']['min_soc']*100:.0f}%")
+            regen_enabled = config['battery'].get('regen_enabled', False)
+            lines.append(f"Regenerative Braking: {'ENABLED' if regen_enabled else 'DISABLED'}")
+            if regen_enabled:
+                lines.append(f"  Regen Efficiency: {config['battery'].get('eta_regen', 0.85)*100:.0f}%")
+                lines.append(f"  Max Regen Power: {config['battery'].get('max_regen_kW', 50)} kW")
+                lines.append(f"  Braking Capture: {config['battery'].get('regen_capture_percent', 100):.0f}%")
         lines.append("")
         
         # Autocross results

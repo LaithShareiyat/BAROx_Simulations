@@ -93,10 +93,13 @@ class ControlPanel(ttk.Frame):
             },
             'aero': {'rho': 1.225, 'Cd': 1.1, 'Cl': 1.5, 'A': 1.0},
             'tyre': {'mu': 1.6},
-            'powertrain': {'P_max_kW': 80, 'Fx_max_N': 3900},
+            'powertrain': {'P_max_kW': 160, 'Fx_max_N': 3900},  # 2 × 80kW RWD
             'battery': {
                 'capacity_kWh': 6, 'initial_soc': 1.0, 'min_soc': 0.1,
-                'max_discharge_kW': 80, 'eta_discharge': 0.95
+                'max_discharge_kW': 160, 'eta_discharge': 0.95,  # Match 2 × 80kW
+                'nominal_voltage_V': 400, 'max_current_A': 500,
+                'regen_enabled': False, 'eta_regen': 0.85,
+                'max_regen_kW': 50, 'regen_capture_percent': 100
             }
         }
 
@@ -346,7 +349,7 @@ class ControlPanel(ttk.Frame):
             self.param_widgets[section][key] = entry  # Store reference to entry widget
 
     def _create_battery_section(self):
-        """Create battery parameters section with enable checkbox."""
+        """Create battery parameters section with enable checkbox and regen options."""
         frame = ttk.LabelFrame(self.scrollable_frame, text="BATTERY", padding=(10, 5))
         frame.pack(fill='x', padx=10, pady=5)
 
@@ -368,6 +371,8 @@ class ControlPanel(ttk.Frame):
             ('min_soc', 'Min SoC', ''),
             ('max_discharge_kW', 'Max Discharge', 'kW'),
             ('eta_discharge', 'Efficiency', ''),
+            ('nominal_voltage_V', 'Pack Voltage', 'V'),
+            ('max_current_A', 'Max Current', 'A'),
         ]
 
         for i, (key, label, unit) in enumerate(params):
@@ -389,12 +394,78 @@ class ControlPanel(ttk.Frame):
 
             self.param_entries['battery'][key] = var
 
+        # Regenerative braking section
+        regen_row = len(params) + 1
+
+        # Separator
+        sep = ttk.Separator(frame, orient='horizontal')
+        sep.grid(row=regen_row, column=0, columnspan=3, sticky='ew', padx=5, pady=5)
+        self.battery_widgets.append(sep)
+
+        # Regen enable checkbox
+        regen_row += 1
+        self.regen_enabled = tk.BooleanVar(value=defaults.get('regen_enabled', False))
+        self.regen_checkbox = ttk.Checkbutton(
+            frame, text="Enable Regenerative Braking",
+            variable=self.regen_enabled,
+            command=self._update_regen_state
+        )
+        self.regen_checkbox.grid(row=regen_row, column=0, columnspan=3, sticky='w', padx=5, pady=5)
+        self.battery_widgets.append(self.regen_checkbox)
+
+        # Regen parameters
+        self.regen_widgets = []  # Store regen entry widgets for enabling/disabling
+        regen_params = [
+            ('eta_regen', 'Regen Efficiency', ''),
+            ('max_regen_kW', 'Max Regen Power', 'kW'),
+            ('regen_capture_percent', 'Braking Capture', '%'),
+        ]
+
+        for i, (key, label, unit) in enumerate(regen_params):
+            default_val = defaults.get(key, 0)
+            param_row = regen_row + 1 + i
+
+            lbl = ttk.Label(frame, text=f'  {label}', width=16, anchor='w')
+            lbl.grid(row=param_row, column=0, sticky='w', padx=5, pady=2)
+            self.regen_widgets.append(lbl)
+
+            var = tk.StringVar(value=str(default_val))
+            entry = ttk.Entry(frame, textvariable=var, width=10)
+            entry.grid(row=param_row, column=1, sticky='w', padx=5, pady=2)
+            self.regen_widgets.append(entry)
+
+            if unit:
+                unit_lbl = ttk.Label(frame, text=unit, foreground='gray', width=6)
+                unit_lbl.grid(row=param_row, column=2, sticky='w', pady=2)
+                self.regen_widgets.append(unit_lbl)
+
+            self.param_entries['battery'][key] = var
+
+        # Initially update regen state
+        self._update_regen_state()
+
     def _update_battery_state(self):
         """Enable/disable battery parameter entries."""
         is_custom = self.config_var.get() == 'custom'
         # Only enable if both custom mode AND battery is enabled
         state = 'normal' if (is_custom and self.battery_enabled.get()) else 'disabled'
         for widget in self.battery_widgets:
+            if isinstance(widget, ttk.Entry):
+                widget.configure(state=state)
+            elif isinstance(widget, ttk.Checkbutton) and widget != self.battery_checkbox:
+                # Enable regen checkbox only if battery is enabled
+                widget.configure(state=state)
+        # Also update regen state
+        self._update_regen_state()
+
+    def _update_regen_state(self):
+        """Enable/disable regen parameter entries based on regen checkbox."""
+        is_custom = self.config_var.get() == 'custom'
+        battery_enabled = self.battery_enabled.get()
+        regen_enabled = self.regen_enabled.get()
+        # Only enable regen params if: custom mode AND battery enabled AND regen enabled
+        state = 'normal' if (is_custom and battery_enabled and regen_enabled) else 'disabled'
+        for widget in self.regen_widgets:
             if isinstance(widget, ttk.Entry):
                 widget.configure(state=state)
 
@@ -467,6 +538,13 @@ class ControlPanel(ttk.Frame):
         # Update battery checkbox
         if hasattr(self, 'battery_checkbox'):
             self.battery_checkbox.configure(state=state)
+
+        # Update regen checkbox and entries
+        if hasattr(self, 'regen_checkbox'):
+            # Regen checkbox enabled only if battery is enabled
+            regen_cb_state = 'normal' if (is_custom and self.battery_enabled.get()) else 'disabled'
+            self.regen_checkbox.configure(state=regen_cb_state)
+            self._update_regen_state()
 
         # Reset to defaults when switching to standard
         if not is_custom:
@@ -541,6 +619,9 @@ class ControlPanel(ttk.Frame):
         # Handle battery enabled state
         if 'battery' in config:
             self.battery_enabled.set(config['battery'].get('enabled', True))
+            # Handle regen enabled state
+            if hasattr(self, 'regen_enabled'):
+                self.regen_enabled.set(config['battery'].get('regen_enabled', False))
             self._update_battery_state()
 
     def _on_run_clicked(self):
@@ -575,6 +656,10 @@ class ControlPanel(ttk.Frame):
 
         # Add battery enabled flag
         config['battery']['enabled'] = self.battery_enabled.get()
+
+        # Add regen enabled flag
+        if hasattr(self, 'regen_enabled'):
+            config['battery']['regen_enabled'] = self.regen_enabled.get()
 
         return config
 
