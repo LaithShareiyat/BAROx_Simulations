@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+import numpy as np
+from typing import Union
 
 @dataclass(frozen=True)
 class AeroParams:
@@ -23,8 +25,63 @@ class TyreParamsMVP:
 
 @dataclass(frozen=True)
 class EVPowertrainMVP:
+    """Legacy powertrain model - kept for backward compatibility."""
     P_max: float    # W
     Fx_max: float   # N  (low-speed tractive force cap)
+
+
+@dataclass(frozen=True)
+class EVPowertrainParams:
+    """
+    Extended powertrain parameters with drivetrain configuration.
+
+    Drivetrain types:
+    - 'FWD': Front-wheel drive (2 motors on front axle)
+    - 'RWD': Rear-wheel drive (2 motors on rear axle)
+    - 'AWD': All-wheel drive (4 motors, 2 front + 2 rear)
+    """
+    drivetrain: str           # 'FWD', 'RWD', or 'AWD'
+    motor_power_kW: float     # Power per motor [kW]
+    motor_torque_Nm: float    # Peak torque per motor [Nm]
+    motor_rpm_max: float      # Maximum motor RPM
+    gear_ratio: float         # Final drive gear ratio (motor:wheel)
+    wheel_radius_m: float     # Wheel radius [m]
+    motor_efficiency: float = 0.80  # Motor efficiency [0-1]
+
+    @property
+    def n_motors(self) -> int:
+        """Number of motors based on drivetrain configuration."""
+        return 4 if self.drivetrain == 'AWD' else 2
+
+    @property
+    def P_max(self) -> float:
+        """Total maximum power [W]."""
+        return self.motor_power_kW * 1000 * self.n_motors
+
+    @property
+    def Fx_max(self) -> float:
+        """Maximum tractive force at low speed [N].
+
+        Calculated from motor torque, number of motors, gear ratio, and wheel radius.
+        Fx = (torque × n_motors × gear_ratio) / wheel_radius
+        """
+        return (self.motor_torque_Nm * self.n_motors * self.gear_ratio) / self.wheel_radius_m
+
+    @property
+    def v_max_rpm(self) -> float:
+        """Maximum vehicle speed limited by motor RPM [m/s].
+
+        v = (wheel_rpm × 2π × wheel_radius) / 60
+        where wheel_rpm = motor_rpm / gear_ratio
+        """
+        wheel_rpm = self.motor_rpm_max / self.gear_ratio
+        return (wheel_rpm * 2 * np.pi * self.wheel_radius_m) / 60
+
+    @property
+    def v_crossover(self) -> float:
+        """Speed at which power limit takes over from torque limit [m/s]."""
+        return self.P_max / self.Fx_max
+
 
 @dataclass(frozen=True)
 class BatteryParams:
@@ -55,5 +112,10 @@ class VehicleParams:
     Crr: float      # [-]
     aero: AeroParams
     tyre: TyreParamsMVP
-    powertrain: EVPowertrainMVP
+    powertrain: Union[EVPowertrainMVP, EVPowertrainParams]  # Either legacy or extended
     battery: BatteryParams = None  # Optional battery params
+
+    @property
+    def has_extended_powertrain(self) -> bool:
+        """Check if using extended powertrain with drivetrain config."""
+        return isinstance(self.powertrain, EVPowertrainParams)

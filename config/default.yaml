@@ -19,8 +19,19 @@ tyre:
   mu: 1.6
 
 powertrain:
-  P_max_kW: 160           # 2 × 80kW rear wheel drive motors
-  Fx_max_N: 3900          # Traction-limited by rear tyre grip
+  # Drivetrain configuration
+  drivetrain: RWD         # FWD (front), RWD (rear), or AWD (all-wheel)
+  # Motor parameters (per motor)
+  motor_power_kW: 80      # Power per motor [kW]
+  motor_torque_Nm: 100    # Peak torque per motor [Nm]
+  motor_rpm_max: 6000     # Maximum motor RPM
+  motor_efficiency: 0.80  # Motor efficiency [0-1]
+  # Transmission
+  gear_ratio: 3.5         # Final drive gear ratio (motor:wheel)
+  wheel_radius_m: 0.225   # Wheel radius [m] (18" tire)
+  # Legacy fields (for backward compatibility, auto-calculated if not present)
+  # P_max_kW: 160         # Total power = motor_power_kW × n_motors
+  # Fx_max_N: 3111        # Max force = (torque × n_motors × gear) / radius
 
 battery:
   capacity_kWh: 6         # Typical FS EV battery (5-7 kWh)

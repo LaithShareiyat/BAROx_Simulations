@@ -28,7 +28,7 @@ def channels(track: Track, v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return ax[:-1], ay[:-1]
 
 def energy_consumption(track: Track, v: np.ndarray, vehicle: VehicleParams,
-                       eta_motor: float = 0.92, eta_regen: float = 0.7) -> dict:
+                       eta_motor: float = 0.80, eta_regen: float = 0.7) -> dict:
     """
     Calculate energy consumption and regeneration.
     

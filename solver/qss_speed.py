@@ -15,7 +15,7 @@ from models.track import Track
 from models.vehicle import VehicleParams
 from physics.aero import drag, downforce
 from physics.tyre import a_max, ax_available
-from physics.powertrain import max_tractive_force
+from physics.powertrain import max_tractive_force, max_tractive_force_extended
 from physics.resistive import rolling_resistance
 
 
@@ -97,23 +97,29 @@ def solve_qss(track: Track, vehicle: VehicleParams,
     # =========================================
     # At each point: a_y = v² * κ ≤ a_y_max
     # Therefore: v ≤ √(a_y_max / |κ|)
-    
+    # Also limited by: motor RPM limit if using extended powertrain
+
+    # Get RPM-limited top speed (if using extended powertrain)
+    v_max_rpm = 100.0  # Default high limit
+    if hasattr(vehicle.powertrain, 'v_max_rpm'):
+        v_max_rpm = vehicle.powertrain.v_max_rpm
+
     v_lat = np.zeros(n)
     for i in range(n):
         v_guess = 50.0  # Initial guess [m/s]
-        
+
         # Iterate because downforce depends on speed
         for _ in range(10):
             Fdown = downforce(vehicle.aero.rho, vehicle.aero.CL_A, v_guess)
             amax = a_max(mu, g, m, Fdown)
-            
+
             kappa_i = abs(track.kappa[i])
             if kappa_i < 1e-6:  # Straight section
-                v_lat[i] = 100.0  # High limit
+                v_lat[i] = v_max_rpm  # Limited by RPM, not grip
                 break
             else:
-                v_lat[i] = np.sqrt(amax / kappa_i)
-            
+                v_lat[i] = min(np.sqrt(amax / kappa_i), v_max_rpm)
+
             if abs(v_lat[i] - v_guess) < 0.01:
                 break
             v_guess = v_lat[i]
@@ -162,12 +168,8 @@ def solve_qss(track: Track, vehicle: VehicleParams,
         ay = v_i**2 * abs(track.kappa[i])
         ax_grip = ax_available(amax, ay)
         
-        # Maximum power-limited acceleration
-        Fx_motor = max_tractive_force(
-            vehicle.powertrain.P_max,
-            vehicle.powertrain.Fx_max,
-            v_i
-        )
+        # Maximum power-limited acceleration (uses extended function for RPM limit)
+        Fx_motor = max_tractive_force_extended(vehicle.powertrain, v_i)
         ax_power = (Fx_motor - Fdrag - Frr) / m
         
         # Take minimum (most limiting)

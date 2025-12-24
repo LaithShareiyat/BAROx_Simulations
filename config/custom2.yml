@@ -10,8 +10,13 @@ aero:
 tyre:
   mu: 1.6
 powertrain:
-  P_max_kW: 80
-  Fx_max_N: 3900
+  drivetrain: RWD
+  motor_power_kW: 40
+  motor_torque_Nm: 125
+  motor_rpm_max: 6000
+  motor_efficiency: 0.80
+  gear_ratio: 3.5
+  wheel_radius_m: 0.225
 battery:
   capacity_kWh: 2
   initial_soc: 1.0
