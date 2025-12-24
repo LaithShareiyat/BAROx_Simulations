@@ -30,7 +30,7 @@ class BatteryValidation:
 
 
 def calculate_power_profile(track: Track, v: np.ndarray, vehicle: VehicleParams,
-                            eta_motor: float = 0.92) -> np.ndarray:
+                            eta_motor: float = None) -> np.ndarray:
     """
     Calculate instantaneous electrical power at each segment.
 
@@ -42,7 +42,7 @@ def calculate_power_profile(track: Track, v: np.ndarray, vehicle: VehicleParams,
         track: Track object
         v: Velocity profile [m/s]
         vehicle: Vehicle parameters
-        eta_motor: Motor efficiency
+        eta_motor: Motor efficiency (if None, uses powertrain.motor_efficiency or 0.80)
 
     Returns:
         power_kW: Power at each segment [kW] (positive = discharge, negative = regen)
@@ -50,6 +50,13 @@ def calculate_power_profile(track: Track, v: np.ndarray, vehicle: VehicleParams,
     m = vehicle.m
     g = vehicle.g
     battery = vehicle.battery
+
+    # Get motor efficiency from powertrain if available, otherwise use parameter or default
+    if eta_motor is None:
+        if hasattr(vehicle.powertrain, 'motor_efficiency'):
+            eta_motor = vehicle.powertrain.motor_efficiency
+        else:
+            eta_motor = 0.80
 
     # Check if regen is enabled
     regen_enabled = battery is not None and battery.regen_enabled
@@ -107,7 +114,7 @@ def calculate_power_profile(track: Track, v: np.ndarray, vehicle: VehicleParams,
 
 
 def simulate_battery(track: Track, v: np.ndarray, vehicle: VehicleParams,
-                     eta_motor: float = 0.92) -> BatteryState:
+                     eta_motor: float = None) -> BatteryState:
     """
     Simulate battery state throughout the lap (supports regen).
 
@@ -115,7 +122,7 @@ def simulate_battery(track: Track, v: np.ndarray, vehicle: VehicleParams,
         track: Track object
         v: Velocity profile [m/s]
         vehicle: Vehicle parameters
-        eta_motor: Motor efficiency
+        eta_motor: Motor efficiency (if None, uses powertrain.motor_efficiency or 0.80)
 
     Returns:
         BatteryState with SoC and energy arrays
@@ -126,6 +133,13 @@ def simulate_battery(track: Track, v: np.ndarray, vehicle: VehicleParams,
     battery = vehicle.battery
     n = len(track.s)
     n_segments = len(track.ds)
+
+    # Get motor efficiency from powertrain if not specified
+    if eta_motor is None:
+        if hasattr(vehicle.powertrain, 'motor_efficiency'):
+            eta_motor = vehicle.powertrain.motor_efficiency
+        else:
+            eta_motor = 0.80
 
     # Calculate power profile (positive = discharge, negative = regen charge)
     power_kW = calculate_power_profile(track, v, vehicle, eta_motor)
@@ -192,7 +206,7 @@ def simulate_battery(track: Track, v: np.ndarray, vehicle: VehicleParams,
 
 
 def validate_battery_capacity(track: Track, v: np.ndarray, vehicle: VehicleParams,
-                              eta_motor: float = 0.92) -> BatteryValidation:
+                              eta_motor: float = None) -> BatteryValidation:
     """
     Validate if battery capacity is sufficient for the lap (supports regen).
 
@@ -200,7 +214,7 @@ def validate_battery_capacity(track: Track, v: np.ndarray, vehicle: VehicleParam
         track: Track object
         v: Velocity profile [m/s]
         vehicle: Vehicle parameters
-        eta_motor: Motor efficiency
+        eta_motor: Motor efficiency (if None, uses powertrain.motor_efficiency or 0.80)
 
     Returns:
         BatteryValidation with detailed results
@@ -286,7 +300,7 @@ def validate_battery_capacity(track: Track, v: np.ndarray, vehicle: VehicleParam
 
 def required_battery_capacity(track: Track, v: np.ndarray, vehicle: VehicleParams,
                               safety_margin: float = 0.2,
-                              eta_motor: float = 0.92) -> float:
+                              eta_motor: float = None) -> float:
     """
     Calculate minimum required battery capacity for the lap (supports regen).
 
@@ -295,7 +309,7 @@ def required_battery_capacity(track: Track, v: np.ndarray, vehicle: VehicleParam
         v: Velocity profile [m/s]
         vehicle: Vehicle parameters
         safety_margin: Additional capacity margin [0-1]
-        eta_motor: Motor efficiency
+        eta_motor: Motor efficiency (if None, uses powertrain.motor_efficiency or 0.80)
 
     Returns:
         Required battery capacity [kWh]
@@ -342,10 +356,10 @@ def sweep_battery_capacity(track: Track, v: np.ndarray, vehicle: VehicleParams,
                            min_capacity: float = 0.5,
                            max_capacity: float = 10.0,
                            num_points: int = 50,
-                           eta_motor: float = 0.92) -> BatterySweepResult:
+                           eta_motor: float = None) -> BatterySweepResult:
     """
     Sweep battery capacity to find minimum viable capacity for completing the track.
-    
+
     Args:
         track: Track object
         v: Velocity profile [m/s]
@@ -353,8 +367,8 @@ def sweep_battery_capacity(track: Track, v: np.ndarray, vehicle: VehicleParams,
         min_capacity: Minimum capacity to test [kWh]
         max_capacity: Maximum capacity to test [kWh]
         num_points: Number of capacity values to test
-        eta_motor: Motor efficiency
-    
+        eta_motor: Motor efficiency (if None, uses powertrain.motor_efficiency or 0.80)
+
     Returns:
         BatterySweepResult with sweep data and minimum viable capacity
     """

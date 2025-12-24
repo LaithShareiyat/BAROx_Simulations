@@ -104,7 +104,7 @@ class BAROxGUI:
             # Import simulation modules
             from models.vehicle import (
                 VehicleParams, AeroParams, TyreParamsMVP,
-                EVPowertrainMVP, BatteryParams
+                EVPowertrainMVP, EVPowertrainParams, BatteryParams
             )
             from solver.qss_speed import solve_qss
             from solver.metrics import lap_time, channels, energy_consumption
@@ -142,7 +142,7 @@ class BAROxGUI:
         """Create VehicleParams from config dictionary."""
         from models.vehicle import (
             VehicleParams, AeroParams, TyreParamsMVP,
-            EVPowertrainMVP, BatteryParams
+            EVPowertrainMVP, EVPowertrainParams, BatteryParams
         )
 
         aero = AeroParams(
@@ -154,10 +154,25 @@ class BAROxGUI:
 
         tyre = TyreParamsMVP(mu=config['tyre']['mu'])
 
-        powertrain = EVPowertrainMVP(
-            P_max=config['powertrain']['P_max_kW'] * 1000,
-            Fx_max=config['powertrain']['Fx_max_N'],
-        )
+        # Check if using new extended powertrain format or legacy format
+        pt_config = config['powertrain']
+        if 'drivetrain' in pt_config:
+            # New extended powertrain format
+            powertrain = EVPowertrainParams(
+                drivetrain=pt_config['drivetrain'],
+                motor_power_kW=pt_config['motor_power_kW'],
+                motor_torque_Nm=pt_config['motor_torque_Nm'],
+                motor_rpm_max=pt_config['motor_rpm_max'],
+                gear_ratio=pt_config['gear_ratio'],
+                wheel_radius_m=pt_config['wheel_radius_m'],
+                motor_efficiency=pt_config.get('motor_efficiency', 0.80),
+            )
+        else:
+            # Legacy format with P_max_kW and Fx_max_N
+            powertrain = EVPowertrainMVP(
+                P_max=pt_config['P_max_kW'] * 1000,
+                Fx_max=pt_config['Fx_max_N'],
+            )
 
         battery = None
         if config['battery'].get('enabled', True):
@@ -450,8 +465,30 @@ class BAROxGUI:
         lines.append(f"Lift Coefficient (Cl): {config['aero']['Cl']}")
         lines.append(f"Frontal Area: {config['aero']['A']} m²")
         lines.append(f"Tyre Friction (μ): {config['tyre']['mu']}")
-        lines.append(f"Max Power: {config['powertrain']['P_max_kW']} kW")
-        lines.append(f"Max Tractive Force: {config['powertrain']['Fx_max_N']} N")
+
+        # Powertrain info - handle both new and legacy formats
+        pt = config['powertrain']
+        if 'drivetrain' in pt:
+            n_motors = 4 if pt['drivetrain'] == 'AWD' else 2
+            total_power = pt['motor_power_kW'] * n_motors
+            fx_max = (pt['motor_torque_Nm'] * n_motors * pt['gear_ratio']) / pt['wheel_radius_m']
+            wheel_rpm = pt['motor_rpm_max'] / pt['gear_ratio']
+            v_max = (wheel_rpm * 2 * 3.14159 * pt['wheel_radius_m']) / 60
+            lines.append(f"Drivetrain: {pt['drivetrain']} ({n_motors} motors)")
+            lines.append(f"Motor Power: {pt['motor_power_kW']} kW (per motor)")
+            lines.append(f"Motor Torque: {pt['motor_torque_Nm']} Nm (per motor)")
+            lines.append(f"Motor Max RPM: {pt['motor_rpm_max']}")
+            motor_eff = pt.get('motor_efficiency', 0.80)
+            lines.append(f"Motor Efficiency: {motor_eff*100:.0f}%")
+            lines.append(f"Gear Ratio: {pt['gear_ratio']}:1")
+            lines.append(f"Wheel Radius: {pt['wheel_radius_m']} m")
+            lines.append(f"Total Power: {total_power:.0f} kW")
+            lines.append(f"Max Tractive Force: {fx_max:.0f} N")
+            lines.append(f"Max Speed (RPM limit): {v_max:.1f} m/s ({v_max*3.6:.0f} km/h)")
+        else:
+            lines.append(f"Max Power: {pt['P_max_kW']} kW")
+            lines.append(f"Max Tractive Force: {pt['Fx_max_N']} N")
+
         if config['battery'].get('enabled', True):
             lines.append(f"Battery Capacity: {config['battery']['capacity_kWh']} kWh")
             lines.append(f"Initial SoC: {config['battery']['initial_soc']*100:.0f}%")

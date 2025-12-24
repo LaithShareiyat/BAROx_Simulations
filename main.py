@@ -7,7 +7,7 @@ import numpy as np
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from models.vehicle import VehicleParams, AeroParams, TyreParamsMVP, EVPowertrainMVP, BatteryParams
+from models.vehicle import VehicleParams, AeroParams, TyreParamsMVP, EVPowertrainMVP, EVPowertrainParams, BatteryParams
 from solver.qss_speed import solve_qss
 from solver.metrics import lap_time, channels, energy_consumption
 from solver.battery import simulate_battery, validate_battery_capacity, required_battery_capacity
@@ -30,10 +30,26 @@ def create_vehicle_from_config(config: dict) -> VehicleParams:
     tyre = TyreParamsMVP(
         mu=config['tyre']['mu'],
     )
-    powertrain = EVPowertrainMVP(
-        P_max=config['powertrain']['P_max_kW'] * 1000,  # Convert kW to W
-        Fx_max=config['powertrain']['Fx_max_N'],
-    )
+
+    # Check if using new extended powertrain format or legacy format
+    pt_config = config['powertrain']
+    if 'drivetrain' in pt_config:
+        # New extended powertrain format
+        powertrain = EVPowertrainParams(
+            drivetrain=pt_config['drivetrain'],
+            motor_power_kW=pt_config['motor_power_kW'],
+            motor_torque_Nm=pt_config['motor_torque_Nm'],
+            motor_rpm_max=pt_config['motor_rpm_max'],
+            gear_ratio=pt_config['gear_ratio'],
+            wheel_radius_m=pt_config['wheel_radius_m'],
+            motor_efficiency=pt_config.get('motor_efficiency', 0.80),
+        )
+    else:
+        # Legacy format with P_max_kW and Fx_max_N
+        powertrain = EVPowertrainMVP(
+            P_max=pt_config['P_max_kW'] * 1000,  # Convert kW to W
+            Fx_max=pt_config['Fx_max_N'],
+        )
     
     # Create battery params if present in config
     battery = None
@@ -115,17 +131,78 @@ def get_custom_vehicle_params(defaults: dict) -> dict:
     ]
     tyre_answers = inquirer.prompt(questions)
     
-    # Powertrain parameters
+    # Powertrain parameters - Drivetrain selection
     print("\n--- Powertrain ---")
-    questions = [
-        inquirer.Text('P_max_kW', 
-                      message=f"Max power [kW] ({defaults['powertrain']['P_max_kW']})",
-                      default=str(defaults['powertrain']['P_max_kW'])),
-        inquirer.Text('Fx_max_N', 
-                      message=f"Max tractive force [N] ({defaults['powertrain']['Fx_max_N']})",
-                      default=str(defaults['powertrain']['Fx_max_N'])),
+    drivetrain_question = [
+        inquirer.List('drivetrain',
+                      message="Select drivetrain configuration",
+                      choices=[
+                          ('2WD Rear (RWD)', 'RWD'),
+                          ('2WD Front (FWD)', 'FWD'),
+                          ('4WD All-Wheel (AWD)', 'AWD'),
+                      ],
+                      default='RWD'),
     ]
-    powertrain_answers = inquirer.prompt(questions)
+    drivetrain_answer = inquirer.prompt(drivetrain_question)
+    drivetrain = drivetrain_answer['drivetrain']
+    n_motors = 4 if drivetrain == 'AWD' else 2
+
+    # Motor parameters
+    pt_defaults = defaults.get('powertrain', {
+        'motor_power_kW': 80,
+        'motor_torque_Nm': 100,
+        'motor_rpm_max': 6000,
+        'gear_ratio': 3.5,
+        'wheel_radius_m': 0.225,
+    })
+
+    print(f"\n  Selected: {drivetrain} ({n_motors} motors)")
+    print("\n--- Motor Parameters (per motor) ---")
+    questions = [
+        inquirer.Text('motor_power_kW',
+                      message=f"Motor power [kW] ({pt_defaults.get('motor_power_kW', 80)})",
+                      default=str(pt_defaults.get('motor_power_kW', 80))),
+        inquirer.Text('motor_torque_Nm',
+                      message=f"Motor peak torque [Nm] ({pt_defaults.get('motor_torque_Nm', 100)})",
+                      default=str(pt_defaults.get('motor_torque_Nm', 100))),
+        inquirer.Text('motor_rpm_max',
+                      message=f"Motor max RPM ({pt_defaults.get('motor_rpm_max', 6000)})",
+                      default=str(pt_defaults.get('motor_rpm_max', 6000))),
+        inquirer.Text('motor_efficiency',
+                      message=f"Motor efficiency [0-1] ({pt_defaults.get('motor_efficiency', 0.80)})",
+                      default=str(pt_defaults.get('motor_efficiency', 0.80))),
+    ]
+    motor_answers = inquirer.prompt(questions)
+
+    print("\n--- Transmission ---")
+    questions = [
+        inquirer.Text('gear_ratio',
+                      message=f"Gear ratio (motor:wheel) ({pt_defaults.get('gear_ratio', 3.5)})",
+                      default=str(pt_defaults.get('gear_ratio', 3.5))),
+        inquirer.Text('wheel_radius_m',
+                      message=f"Wheel radius [m] ({pt_defaults.get('wheel_radius_m', 0.225)})",
+                      default=str(pt_defaults.get('wheel_radius_m', 0.225))),
+    ]
+    transmission_answers = inquirer.prompt(questions)
+
+    # Calculate and display derived values
+    motor_power = float(motor_answers['motor_power_kW'])
+    motor_torque = float(motor_answers['motor_torque_Nm'])
+    motor_rpm = float(motor_answers['motor_rpm_max'])
+    motor_efficiency = float(motor_answers['motor_efficiency'])
+    gear_ratio = float(transmission_answers['gear_ratio'])
+    wheel_radius = float(transmission_answers['wheel_radius_m'])
+
+    total_power = motor_power * n_motors
+    fx_max = (motor_torque * n_motors * gear_ratio) / wheel_radius
+    wheel_rpm = motor_rpm / gear_ratio
+    v_max_rpm = (wheel_rpm * 2 * 3.14159 * wheel_radius) / 60
+
+    print(f"\n  Calculated values:")
+    print(f"    Total power:     {total_power:.0f} kW")
+    print(f"    Max force:       {fx_max:.0f} N")
+    print(f"    Max speed (RPM): {v_max_rpm:.1f} m/s ({v_max_rpm*3.6:.0f} km/h)")
+    print(f"    Motor efficiency: {motor_efficiency*100:.0f}%")
     
     # Battery parameters
     print("\n--- Battery ---")
@@ -207,8 +284,13 @@ def get_custom_vehicle_params(defaults: dict) -> dict:
             'mu': float(tyre_answers['mu']),
         },
         'powertrain': {
-            'P_max_kW': float(powertrain_answers['P_max_kW']),
-            'Fx_max_N': float(powertrain_answers['Fx_max_N']),
+            'drivetrain': drivetrain,
+            'motor_power_kW': motor_power,
+            'motor_torque_Nm': motor_torque,
+            'motor_rpm_max': motor_rpm,
+            'motor_efficiency': motor_efficiency,
+            'gear_ratio': gear_ratio,
+            'wheel_radius_m': wheel_radius,
         },
         'battery': {
             'capacity_kWh': float(battery_answers['capacity_kWh']),
@@ -268,8 +350,30 @@ def print_vehicle_params(config: dict):
     print(f"    Friction (mu):     {config['tyre']['mu']}")
 
     print("\n  POWERTRAIN")
-    print(f"    Max power:         {config['powertrain']['P_max_kW']} kW")
-    print(f"    Max force:         {config['powertrain']['Fx_max_N']} N")
+    pt = config['powertrain']
+    if 'drivetrain' in pt:
+        # New extended format
+        n_motors = 4 if pt['drivetrain'] == 'AWD' else 2
+        total_power = pt['motor_power_kW'] * n_motors
+        fx_max = (pt['motor_torque_Nm'] * n_motors * pt['gear_ratio']) / pt['wheel_radius_m']
+        wheel_rpm = pt['motor_rpm_max'] / pt['gear_ratio']
+        v_max = (wheel_rpm * 2 * 3.14159 * pt['wheel_radius_m']) / 60
+
+        print(f"    Drivetrain:        {pt['drivetrain']} ({n_motors} motors)")
+        print(f"    Motor power:       {pt['motor_power_kW']} kW (per motor)")
+        print(f"    Motor torque:      {pt['motor_torque_Nm']} Nm (per motor)")
+        print(f"    Motor max RPM:     {pt['motor_rpm_max']}")
+        print(f"    Motor efficiency:  {pt.get('motor_efficiency', 0.80):.0%}")
+        print(f"    Gear ratio:        {pt['gear_ratio']}:1")
+        print(f"    Wheel radius:      {pt['wheel_radius_m']} m")
+        print(f"    --- Calculated ---")
+        print(f"    Total power:       {total_power:.0f} kW")
+        print(f"    Max force:         {fx_max:.0f} N")
+        print(f"    Max speed (RPM):   {v_max:.1f} m/s ({v_max*3.6:.0f} km/h)")
+    else:
+        # Legacy format
+        print(f"    Max power:         {pt['P_max_kW']} kW")
+        print(f"    Max force:         {pt['Fx_max_N']} N")
 
     if 'battery' in config:
         print("\n  BATTERY")
