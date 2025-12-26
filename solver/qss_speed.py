@@ -8,6 +8,7 @@ class SolverSettings:
     tol: float = 1e-3     # m/s
     min_points: int = 500  # Minimum points for track refinement
     refine: bool = False   # Whether to refine track resolution
+    use_bicycle_model: bool = True  # Use bicycle model when available
 
 # solver/qss_speed_profile.py
 import numpy as np
@@ -17,6 +18,8 @@ from physics.aero import drag, downforce
 from physics.tyre import a_max, ax_available
 from physics.powertrain import max_tractive_force, max_tractive_force_extended
 from physics.resistive import rolling_resistance
+from physics.bicycle_model import solve_qss_bicycle, calculate_max_lateral_accel
+from physics.torque_vectoring import calculate_tv_yaw_moment, calculate_tv_lateral_benefit, calculate_tv_traction_benefit
 
 
 def refine_track(track: Track, min_points: int = 500) -> Track:
@@ -55,28 +58,31 @@ def refine_track(track: Track, min_points: int = 500) -> Track:
     return from_xy(x_fine, y_fine, closed=track.closed)
 
 
-def solve_qss(track: Track, vehicle: VehicleParams, 
-              refine: bool = False, min_points: int = 500) -> tuple[dict, float]:
+def solve_qss(track: Track, vehicle: VehicleParams,
+              refine: bool = False, min_points: int = 500,
+              use_bicycle_model: bool = True) -> tuple[dict, float]:
     """
     Quasi-Steady-State lap time solver.
-    
+
     Algorithm:
     1. Calculate lateral velocity limit at each point (cornering)
+       - Uses bicycle model with torque vectoring when available
     2. Forward pass: accelerate from start, limited by grip & power
     3. Backward pass: decelerate from end, limited by grip
     4. Take minimum of all three limits
     5. Integrate time
-    
+
     Args:
         track: Track object with geometry
         vehicle: Vehicle parameters
         refine: If True, interpolate track to finer resolution for accuracy
         min_points: Minimum points when refining (default 500)
-    
+        use_bicycle_model: If True, use bicycle model for grip calculations
+
     Returns:
         result: {"v": velocity array, "v_lat": lateral limit, ...}
         lap_time: Total time [s]
-    
+
     Accuracy Notes:
         - Discretization error scales as O(ds²)
         - For best accuracy, use ds ≈ 0.5-1.0 m (500-1500 points per km)
@@ -86,18 +92,25 @@ def solve_qss(track: Track, vehicle: VehicleParams,
     # Optionally refine track for better accuracy
     if refine:
         track = refine_track(track, min_points)
-    
+
     n = len(track.s)
     m = vehicle.m
     g = vehicle.g
     mu = vehicle.tyre.mu
-    
+
+    # Check if bicycle model and torque vectoring are available
+    use_bicycle = use_bicycle_model and vehicle.has_bicycle_model
+    has_tv = vehicle.has_torque_vectoring
+
     # =========================================
     # STEP 1: Lateral (cornering) speed limit
     # =========================================
     # At each point: a_y = v² * κ ≤ a_y_max
     # Therefore: v ≤ √(a_y_max / |κ|)
     # Also limited by: motor RPM limit if using extended powertrain
+    #
+    # With bicycle model: uses slip angle limits and yaw moment balance
+    # With torque vectoring: applies lateral grip improvement
 
     # Get RPM-limited top speed (if using extended powertrain)
     v_max_rpm = 100.0  # Default high limit
@@ -107,13 +120,19 @@ def solve_qss(track: Track, vehicle: VehicleParams,
     v_lat = np.zeros(n)
     for i in range(n):
         v_guess = 50.0  # Initial guess [m/s]
+        kappa_i = abs(track.kappa[i])
 
         # Iterate because downforce depends on speed
         for _ in range(10):
             Fdown = downforce(vehicle.aero.rho, vehicle.aero.CL_A, v_guess)
             amax = a_max(mu, g, m, Fdown)
 
-            kappa_i = abs(track.kappa[i])
+            # Apply torque vectoring lateral benefit if enabled
+            if has_tv and kappa_i > 1e-6:
+                a_y_current = v_guess**2 * kappa_i
+                tv_multiplier = calculate_tv_lateral_benefit(vehicle, a_y_current, a_x=0.0)
+                amax = amax * tv_multiplier
+
             if kappa_i < 1e-6:  # Straight section
                 v_lat[i] = v_max_rpm  # Limited by RPM, not grip
                 break
@@ -123,6 +142,31 @@ def solve_qss(track: Track, vehicle: VehicleParams,
             if abs(v_lat[i] - v_guess) < 0.01:
                 break
             v_guess = v_lat[i]
+
+        # If using bicycle model, validate with slip angle check
+        if use_bicycle and kappa_i > 1e-6:
+            # Use bicycle model to find actual limit considering yaw moment balance
+            try:
+                # Calculate TV yaw moment at this condition
+                M_z_tv = 0.0
+                if has_tv:
+                    a_y = v_lat[i]**2 * kappa_i
+                    tv_output = calculate_tv_yaw_moment(vehicle, a_y, a_x=0.0)
+                    M_z_tv = tv_output.M_z
+
+                # Solve bicycle model and check if saturated
+                state = solve_qss_bicycle(vehicle, v_lat[i], kappa_i, a_x=0.0, M_z_tv=M_z_tv)
+
+                # If saturated, reduce speed until not saturated
+                if state.saturated:
+                    for reduction in np.linspace(0.95, 0.5, 20):
+                        v_test = v_lat[i] * reduction
+                        state = solve_qss_bicycle(vehicle, v_test, kappa_i, a_x=0.0, M_z_tv=M_z_tv)
+                        if not state.saturated:
+                            v_lat[i] = v_test
+                            break
+            except Exception:
+                pass  # Fall back to simple model if bicycle model fails
     
     # =========================================
     # STEP 2: Forward pass (acceleration limit)
@@ -157,25 +201,31 @@ def solve_qss(track: Track, vehicle: VehicleParams,
     for i in range(n - 1):
         v_i = v_fwd[i]
         ds = track.ds[i]
-        
+
         # Current forces
         Fdown = downforce(vehicle.aero.rho, vehicle.aero.CL_A, v_i)
         Fdrag = drag(vehicle.aero.rho, vehicle.aero.CD_A, v_i)
         Frr = rolling_resistance(vehicle.Crr, m, g)
-        
+
         # Maximum grip-limited acceleration
         amax = a_max(mu, g, m, Fdown)
         ay = v_i**2 * abs(track.kappa[i])
+
+        # Apply torque vectoring traction benefit during corner exit
+        if has_tv and ay > 0.1:
+            tv_traction_mult = calculate_tv_traction_benefit(vehicle, ay, a_x=1.0)
+            amax = amax * tv_traction_mult
+
         ax_grip = ax_available(amax, ay)
-        
+
         # Maximum power-limited acceleration (uses extended function for RPM limit)
         Fx_motor = max_tractive_force_extended(vehicle.powertrain, v_i)
         ax_power = (Fx_motor - Fdrag - Frr) / m
-        
+
         # Take minimum (most limiting)
         ax = min(ax_grip, ax_power)
         ax = max(ax, 0)  # Can't accelerate backwards
-        
+
         # Kinematic equation: v² = v₀² + 2*a*ds
         v_next_sq = v_i**2 + 2 * ax * ds
         v_kinematic = np.sqrt(max(v_next_sq, 0))

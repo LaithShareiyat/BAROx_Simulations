@@ -17,21 +17,38 @@ aero:
 
 tyre:
   mu: 1.6
+  # Extended tyre parameters for bicycle model
+  C_alpha_f: 45000      # Front cornering stiffness [N/rad]
+  C_alpha_r: 50000      # Rear cornering stiffness [N/rad]
+
+# Vehicle geometry for bicycle model and weight transfer
+geometry:
+  wheelbase_m: 1.55     # Total wheelbase [m]
+  L_f_m: 0.75           # CoG to front axle [m]
+  L_r_m: 0.80           # CoG to rear axle [m]
+  track_front_m: 1.20   # Front track width [m]
+  track_rear_m: 1.20    # Rear track width [m]
+  h_cg_m: 0.28          # CoG height above ground [m]
 
 powertrain:
   # Drivetrain configuration
   drivetrain: RWD         # FWD (front), RWD (rear), or AWD (all-wheel)
-  # Motor parameters (per motor)
+  # Motor selection (reference from config/motors.yaml)
+  motor: default_motor    # Motor ID from motors.yaml database
+  # Motor parameters (per motor) - auto-filled from motors.yaml if motor is specified
   motor_power_kW: 80      # Power per motor [kW]
   motor_torque_Nm: 100    # Peak torque per motor [Nm]
   motor_rpm_max: 6000     # Maximum motor RPM
-  motor_efficiency: 0.80  # Motor efficiency [0-1]
+  motor_efficiency: 0.85  # Motor efficiency [0-1]
+  motor_weight_kg: 10.0   # Weight per motor [kg]
+  # Powertrain overhead (inverters, wiring, cooling, mounts)
+  powertrain_overhead_kg: 25.0  # Additional powertrain mass [kg]
   # Transmission
   gear_ratio: 3.5         # Final drive gear ratio (motor:wheel)
   wheel_radius_m: 0.225   # Wheel radius [m] (18" tire)
-  # Legacy fields (for backward compatibility, auto-calculated if not present)
-  # P_max_kW: 160         # Total power = motor_power_kW × n_motors
-  # Fx_max_N: 3111        # Max force = (torque × n_motors × gear) / radius
+  # Weight calculation:
+  # Total powertrain mass = (motor_weight_kg × n_motors) + powertrain_overhead_kg
+  # For RWD: (10.0 × 2) + 25.0 = 45 kg (matches mass_powertrain_kg default)
 
 battery:
   capacity_kWh: 6         # Typical FS EV battery (5-7 kWh)
@@ -47,3 +64,10 @@ battery:
   eta_regen: 0.85         # Regen efficiency (motor + battery charging losses)
   max_regen_kW: 50        # Maximum charging power during regen [kW]
   regen_capture_percent: 100  # % of braking using regen vs friction brakes [0-100]
+
+# Torque vectoring system
+torque_vectoring:
+  enabled: false              # Enable torque vectoring (requires RWD or AWD)
+  effectiveness: 1.0          # TV system effectiveness [0-1]
+  max_torque_transfer: 0.5    # Max transfer ratio (0.5 = can shift 50% to one side)
+  strategy: load_proportional # 'load_proportional' or 'fixed_bias'

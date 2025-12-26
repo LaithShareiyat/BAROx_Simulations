@@ -71,9 +71,12 @@ class BAROxGUI:
         )
         self.control_panel.pack(fill='both', expand=True)
 
-        # Right panel - Results
+        # Right panel - Results (with config callback for battery optimizer)
         self.results_frame = ttk.Frame(self.paned)
-        self.results_panel = ResultsPanel(self.results_frame)
+        self.results_panel = ResultsPanel(
+            self.results_frame,
+            get_config_callback=self.control_panel.get_config
+        )
         self.results_panel.pack(fill='both', expand=True)
 
         # Add panels to paned window
@@ -141,8 +144,9 @@ class BAROxGUI:
     def _create_vehicle(self, config: dict):
         """Create VehicleParams from config dictionary."""
         from models.vehicle import (
-            VehicleParams, AeroParams, TyreParamsMVP,
-            EVPowertrainMVP, EVPowertrainParams, BatteryParams
+            VehicleParams, AeroParams, TyreParamsMVP, TyreParams,
+            EVPowertrainMVP, EVPowertrainParams, BatteryParams,
+            VehicleGeometry, TorqueVectoringParams
         )
 
         aero = AeroParams(
@@ -152,7 +156,16 @@ class BAROxGUI:
             A=config['aero']['A'],
         )
 
-        tyre = TyreParamsMVP(mu=config['tyre']['mu'])
+        # Check if using extended tyre model with cornering stiffness
+        tyre_config = config['tyre']
+        if 'C_alpha_f' in tyre_config:
+            tyre = TyreParams(
+                mu=tyre_config['mu'],
+                C_alpha_f=tyre_config.get('C_alpha_f', 45000.0),
+                C_alpha_r=tyre_config.get('C_alpha_r', 50000.0),
+            )
+        else:
+            tyre = TyreParamsMVP(mu=tyre_config['mu'])
 
         # Check if using new extended powertrain format or legacy format
         pt_config = config['powertrain']
@@ -165,7 +178,7 @@ class BAROxGUI:
                 motor_rpm_max=pt_config['motor_rpm_max'],
                 gear_ratio=pt_config['gear_ratio'],
                 wheel_radius_m=pt_config['wheel_radius_m'],
-                motor_efficiency=pt_config.get('motor_efficiency', 0.80),
+                motor_efficiency=pt_config.get('motor_efficiency', 0.85),
             )
         else:
             # Legacy format with P_max_kW and Fx_max_N
@@ -192,6 +205,30 @@ class BAROxGUI:
                 regen_capture_percent=config['battery'].get('regen_capture_percent', 100.0),
             )
 
+        # Create geometry params if present (for bicycle model)
+        geometry = None
+        if 'geometry' in config:
+            geo_config = config['geometry']
+            geometry = VehicleGeometry(
+                wheelbase_m=geo_config.get('wheelbase_m', 1.55),
+                L_f_m=geo_config.get('L_f_m', 0.75),
+                L_r_m=geo_config.get('L_r_m', 0.80),
+                track_front_m=geo_config.get('track_front_m', 1.20),
+                track_rear_m=geo_config.get('track_rear_m', 1.20),
+                h_cg_m=geo_config.get('h_cg_m', 0.28),
+            )
+
+        # Create torque vectoring params if present
+        torque_vectoring = None
+        if 'torque_vectoring' in config:
+            tv_config = config['torque_vectoring']
+            torque_vectoring = TorqueVectoringParams(
+                enabled=tv_config.get('enabled', False),
+                effectiveness=tv_config.get('effectiveness', 1.0),
+                max_torque_transfer=tv_config.get('max_torque_transfer', 0.5),
+                strategy=tv_config.get('strategy', 'load_proportional'),
+            )
+
         return VehicleParams(
             m=config['vehicle']['mass_kg'],
             g=config['vehicle']['g'],
@@ -200,13 +237,15 @@ class BAROxGUI:
             tyre=tyre,
             powertrain=powertrain,
             battery=battery,
+            geometry=geometry,
+            torque_vectoring=torque_vectoring,
         )
 
     def _run_autocross(self, vehicle, config: dict) -> dict:
         """Run autocross simulation and return metrics."""
         from events.autocross_generator import build_standard_autocross, validate_autocross
         from solver.qss_speed import solve_qss
-        from solver.battery import simulate_battery, validate_battery_capacity, sweep_battery_capacity
+        from solver.battery import simulate_battery, validate_battery_capacity
 
         # Build track
         track, metadata = build_standard_autocross()
@@ -230,19 +269,6 @@ class BAROxGUI:
             metrics['battery_sufficient'] = battery_validation.sufficient
             metrics['battery_state'] = battery_state
             metrics['vehicle'] = vehicle
-            
-            # Battery capacity sweep - uses the actual track and velocity profile
-            try:
-                sweep_result = sweep_battery_capacity(
-                    track, v, vehicle,
-                    min_capacity=0.5,
-                    max_capacity=15.0,
-                    num_points=100
-                )
-                metrics['battery_sweep'] = sweep_result
-            except Exception as e:
-                print(f"Battery sweep failed: {e}")
-                metrics['battery_sweep'] = None
 
         return metrics
 
@@ -335,11 +361,6 @@ class BAROxGUI:
         # Update battery plot (for both events)
         self.results_panel.update_battery_combined_plot(autocross_data, skidpad_data)
 
-        # Update battery sweep plot (autocross only - shows message if battery disabled)
-        if autocross_data:
-            config = self.control_panel.get_config()
-            self.results_panel.update_battery_sweep_plot(autocross_data, config)
-
         # Show results tab
         self.results_panel.show_tab('results')
 
@@ -403,7 +424,6 @@ class BAROxGUI:
                 (self.results_panel.track_canvas, "speed_track_map.png"),
                 (self.results_panel.speed_canvas, "speed_profile.png"),
                 (self.results_panel.battery_canvas, "battery_analysis.png"),
-                (self.results_panel.sweep_canvas, "battery_sweep.png"),
             ]
             
             for canvas, filename in plot_configs:
@@ -478,7 +498,7 @@ class BAROxGUI:
             lines.append(f"Motor Power: {pt['motor_power_kW']} kW (per motor)")
             lines.append(f"Motor Torque: {pt['motor_torque_Nm']} Nm (per motor)")
             lines.append(f"Motor Max RPM: {pt['motor_rpm_max']}")
-            motor_eff = pt.get('motor_efficiency', 0.80)
+            motor_eff = pt.get('motor_efficiency', 0.85)
             lines.append(f"Motor Efficiency: {motor_eff*100:.0f}%")
             lines.append(f"Gear Ratio: {pt['gear_ratio']}:1")
             lines.append(f"Wheel Radius: {pt['wheel_radius_m']} m")
@@ -527,15 +547,7 @@ class BAROxGUI:
                 lines.append(f"  Total Energy: {bv.total_energy_kWh:.3f} kWh")
                 lines.append(f"  Peak Power: {bv.peak_power_kW:.1f} kW")
                 lines.append(f"  Average Power: {bv.avg_power_kW:.1f} kW")
-            
-            if ac.get('battery_sweep'):
-                sweep = ac['battery_sweep']
-                lines.append("")
-                lines.append("Battery Capacity Sweep:")
-                lines.append(f"  Minimum Viable Capacity: {sweep.min_viable_kWh:.3f} kWh")
-                lines.append(f"  Recommended Capacity: {sweep.recommended_kWh:.3f} kWh")
-                lines.append(f"  Energy Required: {sweep.energy_required_kWh:.3f} kWh")
-            
+
             lines.append("")
         
         # Skidpad results

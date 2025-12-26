@@ -42,7 +42,7 @@ def calculate_power_profile(track: Track, v: np.ndarray, vehicle: VehicleParams,
         track: Track object
         v: Velocity profile [m/s]
         vehicle: Vehicle parameters
-        eta_motor: Motor efficiency (if None, uses powertrain.motor_efficiency or 0.80)
+        eta_motor: Motor efficiency (if None, uses powertrain.motor_efficiency or 0.85)
 
     Returns:
         power_kW: Power at each segment [kW] (positive = discharge, negative = regen)
@@ -56,7 +56,7 @@ def calculate_power_profile(track: Track, v: np.ndarray, vehicle: VehicleParams,
         if hasattr(vehicle.powertrain, 'motor_efficiency'):
             eta_motor = vehicle.powertrain.motor_efficiency
         else:
-            eta_motor = 0.80
+            eta_motor = 0.85
 
     # Check if regen is enabled
     regen_enabled = battery is not None and battery.regen_enabled
@@ -122,7 +122,7 @@ def simulate_battery(track: Track, v: np.ndarray, vehicle: VehicleParams,
         track: Track object
         v: Velocity profile [m/s]
         vehicle: Vehicle parameters
-        eta_motor: Motor efficiency (if None, uses powertrain.motor_efficiency or 0.80)
+        eta_motor: Motor efficiency (if None, uses powertrain.motor_efficiency or 0.85)
 
     Returns:
         BatteryState with SoC and energy arrays
@@ -139,7 +139,7 @@ def simulate_battery(track: Track, v: np.ndarray, vehicle: VehicleParams,
         if hasattr(vehicle.powertrain, 'motor_efficiency'):
             eta_motor = vehicle.powertrain.motor_efficiency
         else:
-            eta_motor = 0.80
+            eta_motor = 0.85
 
     # Calculate power profile (positive = discharge, negative = regen charge)
     power_kW = calculate_power_profile(track, v, vehicle, eta_motor)
@@ -214,7 +214,7 @@ def validate_battery_capacity(track: Track, v: np.ndarray, vehicle: VehicleParam
         track: Track object
         v: Velocity profile [m/s]
         vehicle: Vehicle parameters
-        eta_motor: Motor efficiency (if None, uses powertrain.motor_efficiency or 0.80)
+        eta_motor: Motor efficiency (if None, uses powertrain.motor_efficiency or 0.85)
 
     Returns:
         BatteryValidation with detailed results
@@ -309,7 +309,7 @@ def required_battery_capacity(track: Track, v: np.ndarray, vehicle: VehicleParam
         v: Velocity profile [m/s]
         vehicle: Vehicle parameters
         safety_margin: Additional capacity margin [0-1]
-        eta_motor: Motor efficiency (if None, uses powertrain.motor_efficiency or 0.80)
+        eta_motor: Motor efficiency (if None, uses powertrain.motor_efficiency or 0.85)
 
     Returns:
         Required battery capacity [kWh]
@@ -335,126 +335,5 @@ def required_battery_capacity(track: Track, v: np.ndarray, vehicle: VehicleParam
     if vehicle.battery is not None:
         usable_fraction = 1.0 - vehicle.battery.min_soc
         required = required / usable_fraction
-    
+
     return max(required, 0.1)  # Minimum 0.1 kWh
-
-
-@dataclass
-class BatterySweepResult:
-    """Results from battery capacity sweep."""
-    capacities_kWh: np.ndarray      # Tested capacities [kWh]
-    final_soc: np.ndarray           # Final SoC at each capacity
-    min_soc: np.ndarray             # Minimum SoC at each capacity
-    sufficient: np.ndarray          # Boolean array - sufficient capacity
-    min_viable_kWh: float           # Minimum viable capacity [kWh]
-    recommended_kWh: float          # Recommended capacity with margin [kWh]
-    energy_required_kWh: float      # Total energy required [kWh]
-    usable_fraction: float          # Usable SoC range (1 - min_soc)
-
-
-def sweep_battery_capacity(track: Track, v: np.ndarray, vehicle: VehicleParams,
-                           min_capacity: float = 0.5,
-                           max_capacity: float = 10.0,
-                           num_points: int = 50,
-                           eta_motor: float = None) -> BatterySweepResult:
-    """
-    Sweep battery capacity to find minimum viable capacity for completing the track.
-
-    Args:
-        track: Track object
-        v: Velocity profile [m/s]
-        vehicle: Vehicle parameters (battery params used for min_soc, efficiency)
-        min_capacity: Minimum capacity to test [kWh]
-        max_capacity: Maximum capacity to test [kWh]
-        num_points: Number of capacity values to test
-        eta_motor: Motor efficiency (if None, uses powertrain.motor_efficiency or 0.80)
-
-    Returns:
-        BatterySweepResult with sweep data and minimum viable capacity
-    """
-    from copy import deepcopy
-    
-    # Get battery parameters
-    if vehicle.battery is None:
-        raise ValueError("Vehicle has no battery parameters defined")
-    
-    battery_template = vehicle.battery
-    min_soc_limit = battery_template.min_soc
-    usable_fraction = 1.0 - min_soc_limit
-    
-    # Create capacity sweep array
-    capacities = np.linspace(min_capacity, max_capacity, num_points)
-    
-    # Arrays to store results
-    final_soc = np.zeros(num_points)
-    min_soc = np.zeros(num_points)
-    sufficient = np.zeros(num_points, dtype=bool)
-    
-    # Calculate power profile once (doesn't depend on battery capacity)
-    power_kW = calculate_power_profile(track, v, vehicle, eta_motor)
-    
-    # Time per segment
-    v_avg = 0.5 * (v[:-1] + v[1:])
-    v_avg = np.maximum(v_avg, 0.1)
-    dt = track.ds / v_avg
-    
-    # Energy per segment before efficiency [kWh]
-    energy_segment_raw = power_kW * dt / 3600.0
-    
-    # Apply discharge efficiency
-    energy_segment = energy_segment_raw / battery_template.eta_discharge
-    
-    # Total energy required
-    total_energy = np.sum(energy_segment)
-    
-    # Sweep through capacities
-    for i, cap in enumerate(capacities):
-        # Energy as fraction of this capacity
-        energy_fraction = np.cumsum(energy_segment) / cap
-        
-        # SoC profile
-        soc_profile = battery_template.initial_soc - energy_fraction
-        
-        # Store results
-        final_soc[i] = soc_profile[-1]
-        min_soc[i] = np.min(soc_profile)
-        sufficient[i] = min_soc[i] >= min_soc_limit
-    
-    # Find minimum viable capacity (first capacity where sufficient=True)
-    viable_indices = np.where(sufficient)[0]
-    if len(viable_indices) > 0:
-        min_viable_idx = viable_indices[0]
-        min_viable_kWh = capacities[min_viable_idx]
-        
-        # Binary search for more precise minimum
-        if min_viable_idx > 0:
-            low = capacities[min_viable_idx - 1]
-            high = capacities[min_viable_idx]
-            
-            for _ in range(20):  # Binary search iterations
-                mid = (low + high) / 2
-                energy_fraction = np.cumsum(energy_segment) / mid
-                soc_profile = battery_template.initial_soc - energy_fraction
-                if np.min(soc_profile) >= min_soc_limit:
-                    high = mid
-                else:
-                    low = mid
-            
-            min_viable_kWh = high
-    else:
-        # No viable capacity found in range
-        min_viable_kWh = max_capacity * 1.5  # Indicate need for larger capacity
-    
-    # Recommended capacity with 10% margin
-    recommended_kWh = min_viable_kWh * 1.1
-    
-    return BatterySweepResult(
-        capacities_kWh=capacities,
-        final_soc=final_soc,
-        min_soc=min_soc,
-        sufficient=sufficient,
-        min_viable_kWh=min_viable_kWh,
-        recommended_kWh=recommended_kWh,
-        energy_required_kWh=total_energy,
-        usable_fraction=usable_fraction,
-    )

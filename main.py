@@ -7,7 +7,11 @@ import numpy as np
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from models.vehicle import VehicleParams, AeroParams, TyreParamsMVP, EVPowertrainMVP, EVPowertrainParams, BatteryParams
+from models.vehicle import (
+    VehicleParams, AeroParams, TyreParamsMVP, TyreParams,
+    EVPowertrainMVP, EVPowertrainParams, BatteryParams,
+    VehicleGeometry, TorqueVectoringParams
+)
 from solver.qss_speed import solve_qss
 from solver.metrics import lap_time, channels, energy_consumption
 from solver.battery import simulate_battery, validate_battery_capacity, required_battery_capacity
@@ -19,6 +23,37 @@ def load_standard_vehicle(config_path: str = "config/default.yaml") -> dict:
         return yaml.safe_load(f)
 
 
+def load_motor_database(motors_path: str = "config/motors.yaml") -> dict:
+    """Load motor database from YAML file.
+
+    Returns:
+        Dictionary of motors keyed by motor ID
+    """
+    try:
+        with open(motors_path, 'r') as f:
+            data = yaml.safe_load(f)
+            return data.get('motors', {})
+    except FileNotFoundError:
+        print(f"Warning: Motor database not found at {motors_path}")
+        return {}
+
+
+def get_motor_params(motor_id: str, motors_db: dict = None) -> dict:
+    """Get motor parameters from database by ID.
+
+    Args:
+        motor_id: Motor identifier (e.g., 'amk_dd5', 'emrax_228')
+        motors_db: Optional pre-loaded motor database
+
+    Returns:
+        Dictionary with motor parameters, or None if not found
+    """
+    if motors_db is None:
+        motors_db = load_motor_database()
+
+    return motors_db.get(motor_id)
+
+
 def create_vehicle_from_config(config: dict) -> VehicleParams:
     """Create a VehicleParams object from config dictionary."""
     aero = AeroParams(
@@ -27,22 +62,65 @@ def create_vehicle_from_config(config: dict) -> VehicleParams:
         Cl=config['aero']['Cl'],
         A=config['aero']['A'],
     )
-    tyre = TyreParamsMVP(
-        mu=config['tyre']['mu'],
-    )
+
+    # Check if using extended tyre model with cornering stiffness
+    tyre_config = config['tyre']
+    if 'C_alpha_f' in tyre_config:
+        tyre = TyreParams(
+            mu=tyre_config['mu'],
+            C_alpha_f=tyre_config.get('C_alpha_f', 45000.0),
+            C_alpha_r=tyre_config.get('C_alpha_r', 50000.0),
+        )
+    else:
+        tyre = TyreParamsMVP(
+            mu=tyre_config['mu'],
+        )
 
     # Check if using new extended powertrain format or legacy format
     pt_config = config['powertrain']
     if 'drivetrain' in pt_config:
-        # New extended powertrain format
+        # Check if referencing a motor from the database
+        motor_params = None
+        if 'motor' in pt_config:
+            motor_id = pt_config['motor']
+            motor_params = get_motor_params(motor_id)
+            if motor_params is None:
+                print(f"Warning: Motor '{motor_id}' not found in database, using inline params")
+
+        # Get motor parameters (from database or inline config)
+        if motor_params:
+            motor_name = motor_params.get('name', motor_id)
+            motor_power_kW = motor_params.get('peak_power_kW', pt_config.get('motor_power_kW', 80))
+            motor_torque_Nm = motor_params.get('peak_torque_Nm', pt_config.get('motor_torque_Nm', 100))
+            motor_rpm_max = motor_params.get('max_rpm', pt_config.get('motor_rpm_max', 6000))
+            motor_efficiency = motor_params.get('peak_efficiency', pt_config.get('motor_efficiency', 0.85))
+            motor_weight_kg = motor_params.get('weight_kg', pt_config.get('motor_weight_kg', 10.0))
+            motor_constant = motor_params.get('motor_constant_Nm_A', pt_config.get('motor_constant_Nm_A', 0.5))
+            peak_current = motor_params.get('peak_current_A', pt_config.get('peak_current_A', 200.0))
+        else:
+            motor_name = pt_config.get('motor_name', 'Default Motor')
+            motor_power_kW = pt_config['motor_power_kW']
+            motor_torque_Nm = pt_config['motor_torque_Nm']
+            motor_rpm_max = pt_config['motor_rpm_max']
+            motor_efficiency = pt_config.get('motor_efficiency', 0.85)
+            motor_weight_kg = pt_config.get('motor_weight_kg', 10.0)
+            motor_constant = pt_config.get('motor_constant_Nm_A', 0.5)
+            peak_current = pt_config.get('peak_current_A', 200.0)
+
+        # New extended powertrain format with motor weight
         powertrain = EVPowertrainParams(
             drivetrain=pt_config['drivetrain'],
-            motor_power_kW=pt_config['motor_power_kW'],
-            motor_torque_Nm=pt_config['motor_torque_Nm'],
-            motor_rpm_max=pt_config['motor_rpm_max'],
+            motor_power_kW=motor_power_kW,
+            motor_torque_Nm=motor_torque_Nm,
+            motor_rpm_max=motor_rpm_max,
             gear_ratio=pt_config['gear_ratio'],
             wheel_radius_m=pt_config['wheel_radius_m'],
-            motor_efficiency=pt_config.get('motor_efficiency', 0.80),
+            motor_efficiency=motor_efficiency,
+            motor_name=motor_name,
+            motor_weight_kg=motor_weight_kg,
+            motor_constant_Nm_A=motor_constant,
+            peak_current_A=peak_current,
+            powertrain_overhead_kg=pt_config.get('powertrain_overhead_kg', 25.0),
         )
     else:
         # Legacy format with P_max_kW and Fx_max_N
@@ -69,15 +147,63 @@ def create_vehicle_from_config(config: dict) -> VehicleParams:
             max_regen_kW=config['battery'].get('max_regen_kW', 50.0),
             regen_capture_percent=config['battery'].get('regen_capture_percent', 100.0),
         )
-    
+
+    # Create geometry params if present in config (for bicycle model)
+    geometry = None
+    if 'geometry' in config:
+        geo_config = config['geometry']
+        geometry = VehicleGeometry(
+            wheelbase_m=geo_config.get('wheelbase_m', 1.55),
+            L_f_m=geo_config.get('L_f_m', 0.75),
+            L_r_m=geo_config.get('L_r_m', 0.80),
+            track_front_m=geo_config.get('track_front_m', 1.20),
+            track_rear_m=geo_config.get('track_rear_m', 1.20),
+            h_cg_m=geo_config.get('h_cg_m', 0.28),
+        )
+
+    # Create torque vectoring params if present in config
+    torque_vectoring = None
+    if 'torque_vectoring' in config:
+        tv_config = config['torque_vectoring']
+        torque_vectoring = TorqueVectoringParams(
+            enabled=tv_config.get('enabled', False),
+            effectiveness=tv_config.get('effectiveness', 1.0),
+            max_torque_transfer=tv_config.get('max_torque_transfer', 0.5),
+            strategy=tv_config.get('strategy', 'load_proportional'),
+        )
+
+    # Calculate total vehicle mass
+    # If mass breakdown is provided, use calculated powertrain mass from motors
+    vehicle_config = config['vehicle']
+    if 'mass_chassis_aero_kg' in vehicle_config:
+        # Mass breakdown mode: use calculated powertrain mass
+        mass_chassis_aero = vehicle_config.get('mass_chassis_aero_kg', 75)
+        mass_suspension_tyres = vehicle_config.get('mass_suspension_tyres_kg', 50)
+        mass_battery = vehicle_config.get('mass_battery_kg', 55)
+        mass_electronics = vehicle_config.get('mass_electronics_kg', 25)
+
+        # Use calculated powertrain mass if available (from motor weight × n_motors + overhead)
+        if isinstance(powertrain, EVPowertrainParams):
+            mass_powertrain = powertrain.total_powertrain_mass_kg
+        else:
+            mass_powertrain = vehicle_config.get('mass_powertrain_kg', 45)
+
+        total_mass = (mass_chassis_aero + mass_suspension_tyres +
+                      mass_powertrain + mass_battery + mass_electronics)
+    else:
+        # Simple mode: use mass_kg directly
+        total_mass = vehicle_config['mass_kg']
+
     return VehicleParams(
-        m=config['vehicle']['mass_kg'],
+        m=total_mass,
         g=config['vehicle']['g'],
         Crr=config['vehicle']['Crr'],
         aero=aero,
         tyre=tyre,
         powertrain=powertrain,
         battery=battery,
+        geometry=geometry,
+        torque_vectoring=torque_vectoring,
     )
 
 
@@ -169,8 +295,8 @@ def get_custom_vehicle_params(defaults: dict) -> dict:
                       message=f"Motor max RPM ({pt_defaults.get('motor_rpm_max', 6000)})",
                       default=str(pt_defaults.get('motor_rpm_max', 6000))),
         inquirer.Text('motor_efficiency',
-                      message=f"Motor efficiency [0-1] ({pt_defaults.get('motor_efficiency', 0.80)})",
-                      default=str(pt_defaults.get('motor_efficiency', 0.80))),
+                      message=f"Motor efficiency [0-1] ({pt_defaults.get('motor_efficiency', 0.85)})",
+                      default=str(pt_defaults.get('motor_efficiency', 0.85))),
     ]
     motor_answers = inquirer.prompt(questions)
 
@@ -363,7 +489,7 @@ def print_vehicle_params(config: dict):
         print(f"    Motor power:       {pt['motor_power_kW']} kW (per motor)")
         print(f"    Motor torque:      {pt['motor_torque_Nm']} Nm (per motor)")
         print(f"    Motor max RPM:     {pt['motor_rpm_max']}")
-        print(f"    Motor efficiency:  {pt.get('motor_efficiency', 0.80):.0%}")
+        print(f"    Motor efficiency:  {pt.get('motor_efficiency', 0.85):.0%}")
         print(f"    Gear ratio:        {pt['gear_ratio']}:1")
         print(f"    Wheel radius:      {pt['wheel_radius_m']} m")
         print(f"    --- Calculated ---")

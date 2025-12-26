@@ -1,7 +1,7 @@
 """Right results panel with text output and embedded plots."""
 import tkinter as tk
 from tkinter import ttk
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Callable
 import numpy as np
 from matplotlib.figure import Figure
 
@@ -43,9 +43,16 @@ def calculate_track_boundaries(track_x: np.ndarray, track_y: np.ndarray,
 class ResultsPanel(ttk.Frame):
     """Right panel containing results text and embedded plots."""
 
-    def __init__(self, parent, **kwargs):
-        """Create the results panel with tabbed interface."""
+    def __init__(self, parent, get_config_callback: Callable = None, **kwargs):
+        """Create the results panel with tabbed interface.
+
+        Args:
+            parent: Parent widget
+            get_config_callback: Optional callback to get current config for battery optimizer
+        """
         super().__init__(parent, **kwargs)
+
+        self.get_config_callback = get_config_callback
 
         # Create notebook for tabs
         self.notebook = ttk.Notebook(self)
@@ -57,7 +64,7 @@ class ResultsPanel(ttk.Frame):
         self._create_speed_track_tab()
         self._create_speed_tab()
         self._create_battery_tab()
-        self._create_battery_sweep_tab()
+        self._create_battery_optimizer_tab()
 
         # Status bar at bottom
         self._create_status_bar()
@@ -101,6 +108,7 @@ class ResultsPanel(ttk.Frame):
         self.results_text.tag_configure('error', foreground='#f14c4c')
         self.results_text.tag_configure('warning', foreground='#cca700')
         self.results_text.tag_configure('value', foreground='#ce9178')
+        self.results_text.tag_configure('label', foreground='#9cdcfe')
 
     def _create_layout_tab(self):
         """Create the track layout tab (geometry only, no speed coloring)."""
@@ -138,14 +146,39 @@ class ResultsPanel(ttk.Frame):
         self.battery_canvas = PlotCanvas(self.battery_frame, figsize=(10, 8))
         self.battery_canvas.pack(fill='both', expand=True)
 
-    def _create_battery_sweep_tab(self):
-        """Create the battery capacity sweep tab."""
-        self.sweep_frame = ttk.Frame(self.notebook)
-        self.notebook.add(self.sweep_frame, text="Battery Sweep")
+    def _create_battery_optimizer_tab(self):
+        """Create the battery pack optimizer tab."""
+        self.optimizer_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.optimizer_frame, text="Pack Optimizer")
 
-        from ..widgets.plot_canvas import PlotCanvas
-        self.sweep_canvas = PlotCanvas(self.sweep_frame, figsize=(10, 8))
-        self.sweep_canvas.pack(fill='both', expand=True)
+        from .battery_optimizer_panel import BatteryOptimizerPanel
+
+        # Create optimizer panel with config callback
+        self.battery_optimizer = BatteryOptimizerPanel(
+            self.optimizer_frame,
+            get_base_config=self.get_config_callback or self._get_default_config
+        )
+        self.battery_optimizer.pack(fill='both', expand=True)
+
+    def _get_default_config(self) -> dict:
+        """Fallback default config if no callback provided."""
+        return {
+            'vehicle': {
+                'mass_kg': 250, 'g': 9.81, 'Crr': 0.015,
+                'mass_battery_kg': 55,
+            },
+            'aero': {'rho': 1.225, 'Cd': 1.1, 'Cl': 1.5, 'A': 1.0},
+            'tyre': {'mu': 1.6},
+            'powertrain': {
+                'drivetrain': 'RWD',
+                'motor_power_kW': 80,
+                'motor_torque_Nm': 100,
+                'motor_rpm_max': 6000,
+                'motor_efficiency': 0.85,
+                'gear_ratio': 3.5,
+                'wheel_radius_m': 0.225,
+            },
+        }
 
     def _create_status_bar(self):
         """Create status bar at bottom."""
@@ -163,17 +196,14 @@ class ResultsPanel(ttk.Frame):
 
     def clear_all(self):
         """Clear all results and plots."""
-        # Clear text
         self.results_text.configure(state='normal')
         self.results_text.delete('1.0', 'end')
         self.results_text.configure(state='disabled')
 
-        # Clear plots
         self.layout_canvas.clear()
         self.track_canvas.clear()
         self.speed_canvas.clear()
         self.battery_canvas.clear()
-        self.sweep_canvas.clear()
 
     def set_status(self, message: str, status_type: str = 'normal'):
         """Update status bar message."""
@@ -202,9 +232,9 @@ class ResultsPanel(ttk.Frame):
         self.results_text.delete('1.0', 'end')
 
         # Header
-        self.append_text("=" * 60 + "\n", 'header')
-        self.append_text("  SIMULATION RESULTS\n", 'header')
-        self.append_text("=" * 60 + "\n\n", 'header')
+        self.append_text("=" * 70 + "\n", 'header')
+        self.append_text("                      SIMULATION RESULTS\n", 'header')
+        self.append_text("=" * 70 + "\n\n", 'header')
 
         if 'autocross' in results:
             self._display_autocross_results(results['autocross'])
@@ -222,103 +252,124 @@ class ResultsPanel(ttk.Frame):
         self.notebook.select(0)  # Switch to results tab
 
     def _display_autocross_results(self, metrics: Dict[str, Any]):
-        """Display autocross results."""
-        self.append_text("-" * 60 + "\n", 'subheader')
+        """Display autocross results with aligned columns."""
+        self.append_text("-" * 70 + "\n", 'subheader')
         self.append_text("  AUTOCROSS RESULTS\n", 'subheader')
-        self.append_text("-" * 60 + "\n\n", 'subheader')
+        self.append_text("-" * 70 + "\n\n", 'subheader')
 
-        self.append_text(f"  LAP TIME:          ", '')
+        # Lap time
+        self.append_text("  Lap Time:                    ", 'label')
         self.append_text(f"{metrics['lap_time']:.3f} s\n\n", 'value')
 
-        self.append_text("  SPEED                    m/s        km/h\n")
-        self.append_text(f"    Average:             {metrics['avg_speed']:>6.2f}      {metrics['avg_speed']*3.6:>6.1f}\n")
-        self.append_text(f"    Maximum:             {metrics['max_speed']:>6.2f}      {metrics['max_speed']*3.6:>6.1f}\n")
-        self.append_text(f"    Minimum:             {metrics['min_speed']:>6.2f}      {metrics['min_speed']*3.6:>6.1f}\n\n")
+        # Speed section
+        self.append_text("  SPEED\n", 'label')
+        self.append_text("  " + "-" * 50 + "\n")
+        self.append_text(f"  {'Parameter':<24} {'m/s':>10} {'km/h':>12}\n")
+        self.append_text("  " + "-" * 50 + "\n")
+        self.append_text(f"  {'Average':<24} {metrics['avg_speed']:>10.2f} {metrics['avg_speed']*3.6:>12.1f}\n")
+        self.append_text(f"  {'Maximum':<24} {metrics['max_speed']:>10.2f} {metrics['max_speed']*3.6:>12.1f}\n")
+        self.append_text(f"  {'Minimum':<24} {metrics['min_speed']:>10.2f} {metrics['min_speed']*3.6:>12.1f}\n\n")
 
-        self.append_text("  ACCELERATION            m/s2          g\n")
-        self.append_text(f"    Max longitudinal:    {metrics['max_ax']:>6.2f}      {metrics['max_ax']/9.81:>6.2f}\n")
-        self.append_text(f"    Max braking:         {abs(metrics['min_ax']):>6.2f}      {abs(metrics['min_ax'])/9.81:>6.2f}\n")
-        self.append_text(f"    Max lateral:         {metrics['max_ay']:>6.2f}      {metrics['max_ay']/9.81:>6.2f}\n\n")
+        # Acceleration section
+        self.append_text("  ACCELERATION\n", 'label')
+        self.append_text("  " + "-" * 50 + "\n")
+        self.append_text(f"  {'Parameter':<24} {'m/s²':>10} {'g':>12}\n")
+        self.append_text("  " + "-" * 50 + "\n")
+        self.append_text(f"  {'Max Longitudinal':<24} {metrics['max_ax']:>10.2f} {metrics['max_ax']/9.81:>12.2f}\n")
+        self.append_text(f"  {'Max Braking':<24} {abs(metrics['min_ax']):>10.2f} {abs(metrics['min_ax'])/9.81:>12.2f}\n")
+        self.append_text(f"  {'Max Lateral':<24} {metrics['max_ay']:>10.2f} {metrics['max_ay']/9.81:>12.2f}\n\n")
 
-        self.append_text(f"  ENERGY:            {metrics['energy_consumed_kWh']*1000:.1f} Wh\n\n")
+        # Energy
+        self.append_text("  Energy Consumed:             ", 'label')
+        self.append_text(f"{metrics['energy_consumed_kWh']*1000:.1f} Wh\n\n", 'value')
 
     def _display_skidpad_results(self, metrics: Dict[str, Any]):
-        """Display skidpad results."""
-        self.append_text("-" * 60 + "\n", 'subheader')
+        """Display skidpad results with aligned columns."""
+        self.append_text("-" * 70 + "\n", 'subheader')
         self.append_text("  SKIDPAD RESULTS\n", 'subheader')
-        self.append_text("-" * 60 + "\n\n", 'subheader')
+        self.append_text("-" * 70 + "\n\n", 'subheader')
 
-        self.append_text("  TIMING\n")
-        self.append_text(f"    Single circle:   ", '')
+        # Timing section
+        self.append_text("  TIMING\n", 'label')
+        self.append_text("  " + "-" * 50 + "\n")
+        self.append_text(f"  {'Official Time (2-lap avg)':<30}", 'label')
         self.append_text(f"{metrics['t_official']:.3f} s\n", 'value')
-        self.append_text(f"    Full run (4x):   {metrics['t_full_run']:.3f} s\n\n")
+        self.append_text(f"  {'Single Circle':<30} {metrics['lap_time']:.3f} s\n")
+        self.append_text(f"  {'Full Run (4 circles)':<30} {metrics['t_full_run']:.3f} s\n\n")
 
+        # Performance section
         avg_speed = metrics.get('avg_speed', 0)
         if avg_speed == 0 and 't_official' in metrics:
-            # Calculate from timing
             from events.skidpad import SKIDPAD_CENTRE_RADIUS
             circumference = 2 * np.pi * SKIDPAD_CENTRE_RADIUS
             avg_speed = circumference / metrics['t_official']
 
-        self.append_text("  PERFORMANCE\n")
-        self.append_text(f"    Avg speed:       {avg_speed:.2f} m/s  ({avg_speed*3.6:.1f} km/h)\n")
-        self.append_text(f"    Lat accel:       {metrics['max_ay']:.2f} m/s2  ({metrics['max_ay']/9.81:.2f} g)\n")
-        self.append_text(f"    Energy:          {metrics['energy_consumed_kWh']*1000:.1f} Wh\n\n")
+        self.append_text("  PERFORMANCE\n", 'label')
+        self.append_text("  " + "-" * 50 + "\n")
+        self.append_text(f"  {'Cornering Speed':<24} {avg_speed:>10.2f} m/s  ({avg_speed*3.6:.1f} km/h)\n")
+        self.append_text(f"  {'Lateral Acceleration':<24} {metrics['max_ay']:>10.2f} m/s² ({metrics['max_ay']/9.81:.2f} g)\n")
+        self.append_text(f"  {'Energy Consumed':<24} {metrics['energy_consumed_kWh']*1000:>10.1f} Wh\n\n")
 
     def _display_battery_results(self, metrics: Dict[str, Any]):
-        """Display battery analysis results."""
+        """Display battery analysis results with aligned columns."""
         bv = metrics.get('battery_validation')
         if not bv:
             return
 
-        self.append_text("-" * 60 + "\n", 'subheader')
+        self.append_text("-" * 70 + "\n", 'subheader')
         self.append_text("  BATTERY ANALYSIS\n", 'subheader')
-        self.append_text("-" * 60 + "\n\n", 'subheader')
+        self.append_text("-" * 70 + "\n\n", 'subheader')
 
+        # Status
         status_tag = 'success' if bv.sufficient else 'error'
-        status_text = "[OK] SUFFICIENT" if bv.sufficient else "[FAIL] INSUFFICIENT"
-        self.append_text(f"  STATUS: ", '')
+        status_text = "SUFFICIENT" if bv.sufficient else "INSUFFICIENT"
+        self.append_text("  Status:                      ", 'label')
         self.append_text(f"{status_text}\n\n", status_tag)
 
-        self.append_text("  STATE OF CHARGE\n")
-        self.append_text(f"    Final:           {bv.final_soc:.1%}\n")
-        self.append_text(f"    Minimum:         {bv.min_soc:.1%}  (at {bv.min_soc_distance:.1f} m)\n\n")
+        # State of Charge section
+        self.append_text("  STATE OF CHARGE\n", 'label')
+        self.append_text("  " + "-" * 50 + "\n")
+        self.append_text(f"  {'Final SoC':<30} {bv.final_soc*100:>10.1f} %\n")
+        self.append_text(f"  {'Minimum SoC':<30} {bv.min_soc*100:>10.1f} %  (at {bv.min_soc_distance:.0f} m)\n\n")
 
-        self.append_text("  ENERGY\n")
-        self.append_text(f"    Consumed:        {bv.total_energy_kWh*1000:.1f} Wh\n\n")
+        # Energy & Power section
+        self.append_text("  ENERGY & POWER\n", 'label')
+        self.append_text("  " + "-" * 50 + "\n")
+        self.append_text(f"  {'Energy Consumed':<30} {bv.total_energy_kWh*1000:>10.1f} Wh\n")
+        self.append_text(f"  {'Peak Power':<30} {bv.peak_power_kW:>10.1f} kW\n")
+        self.append_text(f"  {'Average Power':<30} {bv.avg_power_kW:>10.1f} kW\n\n")
 
-        self.append_text("  POWER\n")
-        self.append_text(f"    Peak:            {bv.peak_power_kW:.1f} kW\n")
-        self.append_text(f"    Average:         {bv.avg_power_kW:.1f} kW\n\n")
-
+        # Warnings and errors
         for warn in bv.warnings:
             self.append_text(f"  Warning: {warn}\n", 'warning')
         for err in bv.errors:
             self.append_text(f"  Error: {err}\n", 'error')
+        if bv.warnings or bv.errors:
+            self.append_text("\n")
 
     def _display_summary(self, results: Dict[str, Any]):
-        """Display summary section."""
-        self.append_text("=" * 60 + "\n", 'header')
-        self.append_text("  SUMMARY\n", 'header')
-        self.append_text("=" * 60 + "\n\n", 'header')
+        """Display summary section with aligned columns."""
+        self.append_text("=" * 70 + "\n", 'header')
+        self.append_text("                           SUMMARY\n", 'header')
+        self.append_text("=" * 70 + "\n\n", 'header')
 
         if 'autocross' in results:
-            self.append_text(f"  Autocross lap time:    ", '')
+            self.append_text("  Autocross Lap Time:          ", 'label')
             self.append_text(f"{results['autocross']['lap_time']:.3f} s\n", 'value')
 
         if 'skidpad' in results:
-            self.append_text(f"  Skidpad lap time:      ", '')
+            self.append_text("  Skidpad Official Time:       ", 'label')
             self.append_text(f"{results['skidpad']['t_official']:.3f} s\n", 'value')
 
         if 'autocross' in results and 'battery_sufficient' in results['autocross']:
-            status = "[OK]" if results['autocross']['battery_sufficient'] else "[FAIL]"
+            status = "PASS" if results['autocross']['battery_sufficient'] else "FAIL"
             tag = 'success' if results['autocross']['battery_sufficient'] else 'error'
-            self.append_text(f"  Battery sufficient:    ", '')
+            self.append_text("  Battery Status:              ", 'label')
             self.append_text(f"{status}\n", tag)
 
-        self.append_text("\n" + "=" * 60 + "\n", 'header')
-        self.append_text("  SIMULATION COMPLETE\n", 'success')
-        self.append_text("=" * 60 + "\n", 'header')
+        self.append_text("\n" + "=" * 70 + "\n", 'header')
+        self.append_text("                      SIMULATION COMPLETE\n", 'success')
+        self.append_text("=" * 70 + "\n", 'header')
 
     def update_layout_plot(self, autocross_data: dict = None, skidpad_data: dict = None):
         """Update the track layout plot (geometry only, no speed coloring)."""
@@ -918,103 +969,6 @@ class ResultsPanel(ttk.Frame):
         fig.subplots_adjust(top=0.93)
         self.battery_canvas.draw()
 
-    def update_battery_sweep_plot(self, autocross_data: Dict[str, Any] = None, config: dict = None):
-        """Update the battery capacity sweep plot."""
-        fig = self.sweep_canvas.get_figure()
-        fig.clear()
-
-        # Check if we have sweep data
-        sweep_result = autocross_data.get('battery_sweep') if autocross_data else None
-        if sweep_result is None:
-            # No battery data available
-            ax = fig.add_subplot(111)
-            ax.text(0.5, 0.5, 'No battery data available\n(Battery analysis disabled)',
-                    ha='center', va='center', fontsize=12, color='gray',
-                    transform=ax.transAxes)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            self.sweep_canvas.draw()
-            return
-
-        track = autocross_data.get('track')
-        lap_time = autocross_data.get('lap_time', 0)
-        track_length = track.s[-1] if track else 0
-
-        fig = self.sweep_canvas.get_figure()
-        fig.clear()
-
-        # Create gridspec for plot and text
-        gs = fig.add_gridspec(2, 1, height_ratios=[1, 2], hspace=0.3)
-
-        # Text summary at top
-        ax_text = fig.add_subplot(gs[0])
-        ax_text.axis('off')
-
-        # Build summary text
-        current_cap = config['battery']['capacity_kWh']
-        is_sufficient = current_cap >= sweep_result.min_viable_kWh
-        
-        summary_text = (
-            f"BATTERY CAPACITY SWEEP - AUTOCROSS\n"
-            f"{'─'*50}\n"
-            f"Track Length: {track_length:.1f} m    |    Lap Time: {lap_time:.3f} s\n"
-            f"{'─'*50}\n"
-            f"Total Energy Required: {sweep_result.energy_required_kWh:.3f} kWh\n"
-            f"Usable SoC Range: {sweep_result.usable_fraction*100:.0f}% "
-            f"(from {config['battery']['initial_soc']*100:.0f}% to {config['battery']['min_soc']*100:.0f}%)\n"
-            f"{'─'*50}\n"
-            f"MINIMUM VIABLE CAPACITY: {sweep_result.min_viable_kWh:.3f} kWh\n"
-            f"Recommended (+10% margin): {sweep_result.recommended_kWh:.3f} kWh\n"
-            f"{'─'*50}\n"
-            f"Current Configured: {current_cap:.3f} kWh   →   "
-            f"{'✓ SUFFICIENT' if is_sufficient else '✗ INSUFFICIENT'}"
-        )
-        
-        ax_text.text(0.5, 0.5, summary_text, transform=ax_text.transAxes,
-                     fontsize=10, fontfamily='monospace',
-                     verticalalignment='center', horizontalalignment='center',
-                     bbox=dict(boxstyle='round', facecolor='#f0f0f0', alpha=0.8))
-
-        # Main sweep plot
-        ax = fig.add_subplot(gs[1])
-
-        # Plot SoC vs capacity
-        ax.plot(sweep_result.capacities_kWh, sweep_result.min_soc * 100, 
-                'b-', linewidth=2, label='Minimum SoC')
-        ax.plot(sweep_result.capacities_kWh, sweep_result.final_soc * 100,
-                'g--', linewidth=2, label='Final SoC')
-
-        # Mark minimum viable capacity
-        ax.axvline(sweep_result.min_viable_kWh, color='r', linestyle='--', 
-                   linewidth=2, label=f'Min Viable: {sweep_result.min_viable_kWh:.2f} kWh')
-        ax.axvline(sweep_result.recommended_kWh, color='orange', linestyle=':',
-                   linewidth=2, label=f'Recommended: {sweep_result.recommended_kWh:.2f} kWh')
-
-        # Mark minimum SoC limit
-        min_soc_limit = config['battery']['min_soc'] * 100
-        ax.axhline(min_soc_limit, color='gray', linestyle='--', alpha=0.7,
-                   label=f'Min SoC Limit: {min_soc_limit:.0f}%')
-
-        # Mark current capacity
-        ax.axvline(current_cap, color='purple', linestyle='-.',
-                   linewidth=2, label=f'Current: {current_cap:.2f} kWh')
-
-        # Shade insufficient region
-        ax.fill_between(sweep_result.capacities_kWh, 0, 100,
-                        where=~sweep_result.sufficient, alpha=0.2, color='red',
-                        label='Insufficient Region')
-
-        ax.set_xlabel('Battery Capacity (kWh)', fontsize=11)
-        ax.set_ylabel('State of Charge (%)', fontsize=11)
-        ax.set_title('Battery Capacity vs. Final State of Charge', fontsize=12, fontweight='bold')
-        ax.legend(loc='lower right', fontsize=9)
-        ax.grid(True, alpha=0.3)
-        ax.set_xlim(sweep_result.capacities_kWh[0], sweep_result.capacities_kWh[-1])
-        ax.set_ylim(0, 105)
-
-        fig.tight_layout()
-        self.sweep_canvas.draw()
-
     def show_tab(self, tab_name: str):
         """Switch to a specific tab by name."""
         tab_map = {
@@ -1023,7 +977,6 @@ class ResultsPanel(ttk.Frame):
             'track': 2,
             'speed': 3,
             'battery': 4,
-            'sweep': 5
         }
         if tab_name in tab_map:
             self.notebook.select(tab_map[tab_name])

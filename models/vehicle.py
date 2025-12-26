@@ -23,6 +23,59 @@ class AeroParams:
 class TyreParamsMVP:
     mu: float       # [-] constant friction coefficient
 
+
+@dataclass(frozen=True)
+class TyreParams:
+    """Extended tyre parameters with cornering stiffness for bicycle model."""
+    mu: float                    # [-] friction coefficient
+    C_alpha_f: float = 45000.0   # [N/rad] front axle cornering stiffness
+    C_alpha_r: float = 50000.0   # [N/rad] rear axle cornering stiffness
+
+    @property
+    def as_mvp(self) -> TyreParamsMVP:
+        """Convert to legacy MVP format."""
+        return TyreParamsMVP(mu=self.mu)
+
+
+@dataclass(frozen=True)
+class VehicleGeometry:
+    """Vehicle geometry parameters for bicycle model and weight transfer."""
+    wheelbase_m: float = 1.55       # [m] total wheelbase (L_f + L_r)
+    L_f_m: float = 0.75             # [m] CoG to front axle
+    L_r_m: float = 0.80             # [m] CoG to rear axle
+    track_front_m: float = 1.20     # [m] front track width
+    track_rear_m: float = 1.20      # [m] rear track width
+    h_cg_m: float = 0.28            # [m] CoG height above ground
+
+    def __post_init__(self):
+        # Validate wheelbase consistency
+        if abs(self.wheelbase_m - (self.L_f_m + self.L_r_m)) > 0.01:
+            object.__setattr__(self, 'wheelbase_m', self.L_f_m + self.L_r_m)
+
+    @property
+    def L(self) -> float:
+        """Wheelbase [m]."""
+        return self.L_f_m + self.L_r_m
+
+    @property
+    def weight_distribution_front(self) -> float:
+        """Front weight distribution [0-1]."""
+        return self.L_r_m / self.L
+
+    @property
+    def weight_distribution_rear(self) -> float:
+        """Rear weight distribution [0-1]."""
+        return self.L_f_m / self.L
+
+
+@dataclass(frozen=True)
+class TorqueVectoringParams:
+    """Torque vectoring system parameters."""
+    enabled: bool = False           # Enable torque vectoring
+    effectiveness: float = 1.0      # TV system effectiveness [0-1]
+    max_torque_transfer: float = 0.5  # Max transfer ratio (0.5 = can shift 50% to one side)
+    strategy: str = 'load_proportional'  # 'load_proportional', 'fixed_bias', 'yaw_rate'
+
 @dataclass(frozen=True)
 class EVPowertrainMVP:
     """Legacy powertrain model - kept for backward compatibility."""
@@ -39,6 +92,9 @@ class EVPowertrainParams:
     - 'FWD': Front-wheel drive (2 motors on front axle)
     - 'RWD': Rear-wheel drive (2 motors on rear axle)
     - 'AWD': All-wheel drive (4 motors, 2 front + 2 rear)
+
+    Weight calculation:
+        total_powertrain_mass = (motor_weight_kg × n_motors) + powertrain_overhead_kg
     """
     drivetrain: str           # 'FWD', 'RWD', or 'AWD'
     motor_power_kW: float     # Power per motor [kW]
@@ -46,7 +102,14 @@ class EVPowertrainParams:
     motor_rpm_max: float      # Maximum motor RPM
     gear_ratio: float         # Final drive gear ratio (motor:wheel)
     wheel_radius_m: float     # Wheel radius [m]
-    motor_efficiency: float = 0.80  # Motor efficiency [0-1]
+    motor_efficiency: float = 0.85  # Motor efficiency [0-1]
+    # Motor identification and weight
+    motor_name: str = "Default Motor"  # Motor name/model
+    motor_weight_kg: float = 10.0      # Weight per motor [kg]
+    motor_constant_Nm_A: float = 0.5   # Torque constant Km [Nm/A]
+    peak_current_A: float = 200.0      # Peak motor current [A]
+    # Powertrain overhead (inverters, wiring, cooling, mounts)
+    powertrain_overhead_kg: float = 25.0  # Additional powertrain mass [kg]
 
     @property
     def n_motors(self) -> int:
@@ -82,6 +145,19 @@ class EVPowertrainParams:
         """Speed at which power limit takes over from torque limit [m/s]."""
         return self.P_max / self.Fx_max
 
+    @property
+    def total_motor_mass_kg(self) -> float:
+        """Total mass of all motors [kg]."""
+        return self.motor_weight_kg * self.n_motors
+
+    @property
+    def total_powertrain_mass_kg(self) -> float:
+        """Total powertrain mass including motors and overhead [kg].
+
+        total = (motor_weight × n_motors) + powertrain_overhead
+        """
+        return self.total_motor_mass_kg + self.powertrain_overhead_kg
+
 
 @dataclass(frozen=True)
 class BatteryParams:
@@ -111,11 +187,42 @@ class VehicleParams:
     g: float        # m/s^2
     Crr: float      # [-]
     aero: AeroParams
-    tyre: TyreParamsMVP
+    tyre: Union[TyreParamsMVP, TyreParams]  # Either legacy or extended tyre model
     powertrain: Union[EVPowertrainMVP, EVPowertrainParams]  # Either legacy or extended
     battery: BatteryParams = None  # Optional battery params
+    geometry: VehicleGeometry = None  # Optional geometry for bicycle model
+    torque_vectoring: TorqueVectoringParams = None  # Optional TV params
 
     @property
     def has_extended_powertrain(self) -> bool:
         """Check if using extended powertrain with drivetrain config."""
         return isinstance(self.powertrain, EVPowertrainParams)
+
+    @property
+    def has_bicycle_model(self) -> bool:
+        """Check if vehicle has parameters for bicycle model."""
+        return self.geometry is not None and isinstance(self.tyre, TyreParams)
+
+    @property
+    def has_torque_vectoring(self) -> bool:
+        """Check if torque vectoring is enabled."""
+        return (self.torque_vectoring is not None and
+                self.torque_vectoring.enabled and
+                self.has_extended_powertrain and
+                self.powertrain.drivetrain in ('RWD', 'AWD'))
+
+    @property
+    def mu(self) -> float:
+        """Get friction coefficient from either tyre model."""
+        return self.tyre.mu
+
+    def get_cornering_stiffness(self) -> tuple:
+        """Get front and rear cornering stiffness [N/rad]."""
+        if isinstance(self.tyre, TyreParams):
+            return self.tyre.C_alpha_f, self.tyre.C_alpha_r
+        else:
+            # Estimate from friction coefficient and typical values
+            # C_alpha ≈ 20 × W (typical for racing tires)
+            W_f = self.m * self.g * 0.5  # Approximate front weight
+            W_r = self.m * self.g * 0.5  # Approximate rear weight
+            return 20.0 * W_f, 20.0 * W_r
