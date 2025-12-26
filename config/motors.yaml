@@ -1,0 +1,107 @@
+# Motor Database for BAROx Simulations
+# =====================================
+# Define motors here and reference them by key in vehicle configs.
+#
+# Weight calculation:
+#   total_powertrain_mass = (motor_weight_kg × n_motors) + powertrain_overhead_kg
+#   where n_motors = 2 for FWD/RWD, 4 for AWD
+
+motors:
+  # Default motor (matches legacy 45kg powertrain: 20kg motors + 25kg overhead)
+  default_motor:
+    name: "Default Motor Config"
+    weight_kg: 10.0           # Per motor (2 × 10 = 20kg for RWD)
+    peak_torque_Nm: 100
+    motor_constant_Nm_A: 0.5  # Km = torque/current
+    peak_current_A: 200
+    peak_efficiency: 0.85
+    peak_power_kW: 80
+    max_rpm: 6000
+
+
+  # EMRAX motors
+  emrax_188:
+    name: "EMRAX 188 MV"
+    weight_kg: 7.0
+    peak_torque_Nm: 90
+    motor_constant_Nm_A: 0.45
+    peak_current_A: 200
+    peak_efficiency: 0.95
+    peak_power_kW: 52
+    max_rpm: 6500
+
+  emrax_208:
+    name: "EMRAX 208 HV"
+    weight_kg: 9.3
+    peak_torque_Nm: 140
+    motor_constant_Nm_A: 0.56
+    peak_current_A: 250
+    peak_efficiency: 0.96
+    peak_power_kW: 75
+    max_rpm: 6000
+
+
+  # # YASA YM360 motor
+  # yasa_ym360:
+  #   name: "YASA YM360"
+  #   weight_kg: 24
+  #   peak_torque_Nm: 360
+  #   motor_constant_Nm_A:  
+  #   peak_current_A:
+  #   peak_efficiency:
+  #   peak_power_kW: 125
+  #   max_rpm: 9000
+
+  # yasa_P400R:
+  #   name: "YASA P400R"
+  #   weight_kg: 24
+  #   peak_torque_Nm: 340
+  #   motor_constant_Nm_A:  
+  #   peak_current_A:
+  #   peak_efficiency:
+  #   peak_power_kW: 160
+  #   max_rpm: 8000
+
+
+  # Plettenberg motors (lightweight hub motors)
+  plettenberg_15WK:
+    name: "Plettenberg 15 WK"
+    weight_kg: 3.2
+    peak_torque_Nm: 20
+    motor_constant_Nm_A: 0.2245
+    peak_current_A: 178
+    peak_efficiency: 0.90
+    peak_power_kW: 20
+    max_rpm: 8000
+
+  plettenberg_30-50-B10:
+    name: "Plettenberg 30-50 B10"
+    weight_kg: 6.2
+    peak_torque_Nm: 80
+    motor_constant_Nm_A: 0.7501
+    peak_current_A: 106
+    peak_efficiency: 0.92
+    peak_power_kW: 30
+    max_rpm: 5000
+
+  # Retorq200-HS motor
+  retorq200_hs:
+    name: "Retorq 200 HS"
+    weight_kg: 22
+    peak_torque_Nm: 250
+    motor_constant_Nm_A: 1.14 
+    peak_current_A: 220
+    peak_efficiency: 0.96
+    peak_power_kW: 45
+    max_rpm: 10000
+
+  # Custom template - copy and modify for your motor
+  # custom_motor:
+  #   name: "Your Motor Name"
+  #   weight_kg: 0.0
+  #   peak_torque_Nm: 0
+  #   motor_constant_Nm_A: 0.0
+  #   peak_current_A: 0
+  #   peak_efficiency: 0.0
+  #   peak_power_kW: 0
+  #   max_rpm: 0
