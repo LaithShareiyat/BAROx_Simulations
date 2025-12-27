@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional, Callable
 
 
 class ParameterGroup(ttk.LabelFrame):
-    """A labeled frame containing multiple parameter input fields."""
+    """A labelled frame containing multiple parameter input fields."""
 
     def __init__(self, parent, title: str, parameters: list, **kwargs):
         """

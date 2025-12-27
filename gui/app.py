@@ -17,7 +17,7 @@ class BAROxGUI:
     """Main application class for BAROx GUI."""
 
     def __init__(self, root: tk.Tk):
-        """Initialize the GUI application."""
+        """Initialise the GUI application."""
         self.root = root
         self.root.title("BAROx - Formula Student Lap Time Simulator")
         self.root.geometry("1400x900")
@@ -71,7 +71,7 @@ class BAROxGUI:
         )
         self.control_panel.pack(fill='both', expand=True)
 
-        # Right panel - Results (with config callback for battery optimizer)
+        # Right panel - Results (with config callback for battery optimiser)
         self.results_frame = ttk.Frame(self.paned)
         self.results_panel = ResultsPanel(
             self.results_frame,

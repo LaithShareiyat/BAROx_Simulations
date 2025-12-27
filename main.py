@@ -90,7 +90,7 @@ def create_vehicle_from_config(config: dict) -> VehicleParams:
         # Get motor parameters (from database or inline config)
         if motor_params:
             motor_name = motor_params.get('name', motor_id)
-            motor_power_kW = motor_params.get('peak_power_kW', pt_config.get('motor_power_kW', 80))
+            motor_power_kW = motor_params.get('peak_power_kW', pt_config.get('motor_power_kW', 40))
             motor_torque_Nm = motor_params.get('peak_torque_Nm', pt_config.get('motor_torque_Nm', 100))
             motor_rpm_max = motor_params.get('max_rpm', pt_config.get('motor_rpm_max', 6000))
             motor_efficiency = motor_params.get('peak_efficiency', pt_config.get('motor_efficiency', 0.85))
@@ -275,19 +275,19 @@ def get_custom_vehicle_params(defaults: dict) -> dict:
 
     # Motor parameters
     pt_defaults = defaults.get('powertrain', {
-        'motor_power_kW': 80,
+        'motor_power_kW': 40,  # 40 kW per motor (FS 80 kW total limit)
         'motor_torque_Nm': 100,
         'motor_rpm_max': 6000,
         'gear_ratio': 3.5,
-        'wheel_radius_m': 0.225,
+        'wheel_radius_m': 0.203,
     })
 
     print(f"\n  Selected: {drivetrain} ({n_motors} motors)")
     print("\n--- Motor Parameters (per motor) ---")
     questions = [
         inquirer.Text('motor_power_kW',
-                      message=f"Motor power [kW] ({pt_defaults.get('motor_power_kW', 80)})",
-                      default=str(pt_defaults.get('motor_power_kW', 80))),
+                      message=f"Motor power [kW] ({pt_defaults.get('motor_power_kW', 40)})",
+                      default=str(pt_defaults.get('motor_power_kW', 40))),
         inquirer.Text('motor_torque_Nm',
                       message=f"Motor peak torque [Nm] ({pt_defaults.get('motor_torque_Nm', 100)})",
                       default=str(pt_defaults.get('motor_torque_Nm', 100))),
@@ -306,8 +306,8 @@ def get_custom_vehicle_params(defaults: dict) -> dict:
                       message=f"Gear ratio (motor:wheel) ({pt_defaults.get('gear_ratio', 3.5)})",
                       default=str(pt_defaults.get('gear_ratio', 3.5))),
         inquirer.Text('wheel_radius_m',
-                      message=f"Wheel radius [m] ({pt_defaults.get('wheel_radius_m', 0.225)})",
-                      default=str(pt_defaults.get('wheel_radius_m', 0.225))),
+                      message=f"Wheel radius [m] ({pt_defaults.get('wheel_radius_m', 0.203)})",
+                      default=str(pt_defaults.get('wheel_radius_m', 0.203))),
     ]
     transmission_answers = inquirer.prompt(questions)
 
@@ -336,7 +336,7 @@ def get_custom_vehicle_params(defaults: dict) -> dict:
         'capacity_kWh': 6.0,
         'initial_soc': 1.0,
         'min_soc': 0.1,
-        'max_discharge_kW': 160.0,  # Match 2 × 80kW motors
+        'max_discharge_kW': 80.0,  # Match FS 80 kW total power limit
         'eta_discharge': 0.95,
         'nominal_voltage_V': 400.0,
         'max_current_A': 500.0,

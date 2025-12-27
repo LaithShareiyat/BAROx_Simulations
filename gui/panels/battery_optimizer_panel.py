@@ -1,4 +1,4 @@
-"""Battery Pack Optimizer Panel for finding optimal cell configuration."""
+"""Battery Pack Optimiser Panel for finding optimal cell configuration."""
 import tkinter as tk
 from tkinter import ttk
 import threading
@@ -10,12 +10,12 @@ import numpy as np
 @dataclass
 class CellSpec:
     """Lithium-ion cell specifications."""
-    capacity_mAh: float = 2600      # Cell capacity [mAh]
-    voltage_nominal: float = 3.6    # Nominal voltage [V]
-    voltage_max: float = 4.2        # Max voltage at full charge [V]
-    max_current_A: float = 35       # Max discharge current [A]
-    internal_resistance_mohm: float = 12  # Internal resistance [mΩ]
-    weight_g: float = 45            # Cell weight [g]
+    capacity_mAh: float = 2600              # Cell capacity [mAh]
+    voltage_nominal: float = 3.6            # Nominal voltage [V]
+    voltage_max: float = 4.2                # Max voltage at full charge [V]
+    max_current_A: float = 35               # Max discharge current [A]
+    internal_resistance_mohm: float = 12    # Internal resistance [mΩ]
+    weight_g: float = 45                    # Cell weight [g]
 
 
 @dataclass
@@ -49,14 +49,14 @@ class PackConfig:
     def internal_resistance(self) -> float:
         """Pack internal resistance [mΩ]."""
         if self.parallel < 1:
-            return float('inf')  # Invalid config
+            return float('inf')     # Invalid config
         return (self.series * self.cell.internal_resistance_mohm) / self.parallel
 
     @property
     def internal_resistance_ohm(self) -> float:
         """Pack internal resistance [Ω]."""
         if self.parallel < 1:
-            return float('inf')  # Invalid config
+            return float('inf')     # Invalid config
         return self.internal_resistance / 1000.0
 
     @property
@@ -132,27 +132,27 @@ class OptimizationResult:
     final_soc: float
     sufficient: bool
     total_vehicle_mass: float
-    peak_power_kW: float         # Peak DEMANDED power (before limiting)
-    power_limited: bool          # True if peak demand > pack max power
-    peak_current_A: float        # Peak DEMANDED current (before limiting)
+    peak_power_kW: float                # Peak DEMANDED power (before limiting)
+    power_limited: bool                 # True if peak demand > pack max power
+    peak_current_A: float               # Peak DEMANDED current (before limiting)
     # Voltage and power loss fields
     voltage_loss_V: float = 0.0         # Voltage drop under peak current [V]
     voltage_under_load_V: float = 0.0   # Actual voltage at peak current [V]
     i2r_loss_kW: float = 0.0            # Peak I²R power loss [kW]
     # Constraint violation flags
     exceeds_fs_current: bool = False    # True if peak current > 500A (FS rules)
-    exceeds_inverter_limit: bool = False  # True if peak current > inverter limit
+    exceeds_inverter_limit: bool = False# True if peak current > inverter limit
     exceeds_max_voltage: bool = False   # True if V_max > max voltage constraint
     below_min_voltage: bool = False     # True if V_nom < min voltage constraint
     exceeds_max_mass: bool = False      # True if pack mass > max mass constraint
 
 
 class BatteryOptimizerPanel(ttk.Frame):
-    """Panel for battery pack optimization."""
+    """Panel for battery pack optimisation."""
 
     def __init__(self, parent, get_base_config: Callable, **kwargs):
         """
-        Initialize the battery optimizer panel.
+        Initialise the battery optimiser panel.
 
         Args:
             parent: Parent widget
@@ -167,7 +167,7 @@ class BatteryOptimizerPanel(ttk.Frame):
         self._create_widgets()
 
     def _create_widgets(self):
-        """Create all widgets for the optimizer panel."""
+        """Create all widgets for the optimiser panel."""
         # Main container with two columns
         main_frame = ttk.Frame(self)
         main_frame.pack(fill='both', expand=True, padx=10, pady=10)
@@ -305,13 +305,13 @@ class BatteryOptimizerPanel(ttk.Frame):
             self.constraint_vars[key] = var
 
     def _create_run_button(self, parent):
-        """Create run optimization button."""
+        """Create run optimisation button."""
         btn_frame = ttk.Frame(parent)
         btn_frame.pack(fill='x', pady=10)
 
         self.run_button = ttk.Button(
             btn_frame,
-            text="RUN OPTIMIZATION",
+            text="RUN OPTIMISATION",
             command=self._run_optimization,
             style='Accent.TButton'
         )
@@ -455,14 +455,14 @@ class BatteryOptimizerPanel(ttk.Frame):
         return configs
 
     def _run_optimization(self):
-        """Start the optimization sweep."""
+        """Start the optimisation sweep."""
         if self.running:
             return
 
         self.running = True
         self.run_button.configure(state='disabled', text='RUNNING...')
         self.progress_var.set(0)
-        self.status_var.set("Starting optimization...")
+        self.status_var.set("Starting optimisation...")
         self.results = []
         self.best_result = None
 
@@ -476,7 +476,7 @@ class BatteryOptimizerPanel(ttk.Frame):
         thread.start()
 
     def _optimization_thread(self):
-        """Execute optimization in background thread."""
+        """Execute optimisation in background thread."""
         try:
             configs = self._get_configurations()
             total = len(configs)
@@ -538,7 +538,7 @@ class BatteryOptimizerPanel(ttk.Frame):
 
         except Exception as e:
             import traceback
-            error_msg = f"Optimization error: {str(e)}\n{traceback.format_exc()}"
+            error_msg = f"Optimisation error: {str(e)}\n{traceback.format_exc()}"
             self.winfo_toplevel().after(0, lambda: self._show_error(error_msg))
 
         finally:
@@ -859,7 +859,7 @@ class BatteryOptimizerPanel(ttk.Frame):
         self.summary_text.configure(state='disabled')
 
     def _optimization_complete(self):
-        """Clean up after optimization completes."""
+        """Clean up after optimisation completes."""
         self.running = False
-        self.run_button.configure(state='normal', text='RUN OPTIMIZATION')
+        self.run_button.configure(state='normal', text='RUN OPTIMISATION')
         self.progress_var.set(100)

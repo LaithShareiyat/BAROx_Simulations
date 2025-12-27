@@ -16,7 +16,7 @@ powertrain:
   motor_rpm_max: 6000
   motor_efficiency: 0.85
   gear_ratio: 3.5
-  wheel_radius_m: 0.225
+  wheel_radius_m: 0.203
 battery:
   capacity_kWh: 2
   initial_soc: 1.0

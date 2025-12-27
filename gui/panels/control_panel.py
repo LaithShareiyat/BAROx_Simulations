@@ -55,7 +55,7 @@ class ControlPanel(ttk.Frame):
         self._create_parameter_groups()
         self._create_action_buttons()
 
-        # Initialize state
+        # Initialise state
         self._update_parameter_state()
 
     def _on_mousewheel(self, event):
@@ -130,18 +130,18 @@ class ControlPanel(ttk.Frame):
             'powertrain': {
                 'drivetrain': 'RWD',
                 'motor': 'default_motor',        # Motor reference from motors.yaml
-                'motor_power_kW': 80,
+                'motor_power_kW': 40,            # FS rules: 80 kW total (2 × 40 kW)
                 'motor_torque_Nm': 100,
                 'motor_rpm_max': 6000,
                 'motor_efficiency': 0.85,
                 'motor_weight_kg': 10.0,         # Per motor weight [kg]
                 'gear_ratio': 3.5,
-                'wheel_radius_m': 0.225,
+                'wheel_radius_m': 0.203,
                 'powertrain_overhead_kg': 25.0,  # Inverters, wiring, cooling [kg]
             },
             'battery': {
                 'capacity_kWh': 6, 'initial_soc': 1.0, 'min_soc': 0.1,
-                'max_discharge_kW': 160, 'eta_discharge': 0.95,  # Match 2 × 80kW
+                'max_discharge_kW': 80, 'eta_discharge': 0.95,  # FS 80 kW limit
                 'nominal_voltage_V': 400, 'max_current_A': 500,
                 'regen_enabled': False, 'eta_regen': 0.85,
                 'max_regen_kW': 50, 'regen_capture_percent': 100
@@ -628,7 +628,7 @@ class ControlPanel(ttk.Frame):
         s_entry.grid(row=row, column=1, columnspan=2, sticky='w', padx=5, pady=1)
         self.motor_widgets.append(s_entry)
 
-        # Initialize display
+        # Initialise display
         self._on_motor_change()
         self._update_powertrain_display()
 
@@ -811,7 +811,7 @@ class ControlPanel(ttk.Frame):
             pass
 
     def _create_param_section(self, title: str, section: str, params: list):
-        """Create a parameter section with labeled entries."""
+        """Create a parameter section with labelled entries."""
         frame = ttk.LabelFrame(self.scrollable_frame, text=title, padding=(10, 5))
         frame.pack(fill='x', padx=10, pady=5)
 

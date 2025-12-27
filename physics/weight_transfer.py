@@ -2,7 +2,7 @@
 Weight Transfer Calculations for Vehicle Dynamics.
 
 This module calculates the vertical load (F_z) on each wheel during
-acceleration, braking, and cornering maneuvers.
+acceleration, braking, and cornering manoeuvres.
 
 Physics:
     Longitudinal weight transfer (acceleration/braking):
@@ -15,7 +15,7 @@ Physics:
         m = vehicle mass [kg]
         a_x = longitudinal acceleration [m/s²] (positive = accelerating)
         a_y = lateral acceleration [m/s²] (positive = turning right)
-        h_cg = center of gravity height [m]
+        h_cg = centre of gravity height [m]
         L = wheelbase [m]
         t = track width [m]
 """
