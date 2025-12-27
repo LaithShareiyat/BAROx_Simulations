@@ -49,11 +49,11 @@ def build_skidpad_full_run(n_points_per_circle: int = 100) -> Track:
     """
     Build the full skidpad run (entry + 2 right + 2 left + exit).
 
-    This is for visualization purposes. For timing, use build_skidpad_track().
+    This is for visualisation purposes. For timing, use build_skidpad_track().
 
     Layout:
-    - Left circle: centered at (0, 0)
-    - Right circle: centered at (18.25, 0) = (2 * SKIDPAD_CENTRE_RADIUS, 0)
+    - Left circle: centred at (0, 0)
+    - Right circle: centred at (18.25, 0) = (2 * SKIDPAD_CENTRE_RADIUS, 0)
     - Circles touch at (9.125, 0)
 
     Args:
@@ -102,8 +102,8 @@ def plot_skidpad_full(title: str = "Formula Student Skidpad - Full Layout"):
     Plot the full skidpad layout showing both circles with entry/exit lanes.
 
     Layout:
-    - Left circle: centered at (0, 0)
-    - Right circle: centered at (18.25, 0)
+    - Left circle: centred at (0, 0)
+    - Right circle: centred at (18.25, 0)
     - Entry lane: from bottom, between x = 7.625 and x = 10.625
     - Exit lane: to top, between x = 7.625 and x = 10.625
 

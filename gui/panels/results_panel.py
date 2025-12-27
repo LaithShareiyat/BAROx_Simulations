@@ -48,7 +48,7 @@ class ResultsPanel(ttk.Frame):
 
         Args:
             parent: Parent widget
-            get_config_callback: Optional callback to get current config for battery optimizer
+            get_config_callback: Optional callback to get current config for battery optimiser
         """
         super().__init__(parent, **kwargs)
 
@@ -147,13 +147,13 @@ class ResultsPanel(ttk.Frame):
         self.battery_canvas.pack(fill='both', expand=True)
 
     def _create_battery_optimizer_tab(self):
-        """Create the battery pack optimizer tab."""
+        """Create the battery pack optimiser tab."""
         self.optimizer_frame = ttk.Frame(self.notebook)
-        self.notebook.add(self.optimizer_frame, text="Pack Optimizer")
+        self.notebook.add(self.optimizer_frame, text="Pack Optimiser")
 
         from .battery_optimizer_panel import BatteryOptimizerPanel
 
-        # Create optimizer panel with config callback
+        # Create optimiser panel with config callback
         self.battery_optimizer = BatteryOptimizerPanel(
             self.optimizer_frame,
             get_base_config=self.get_config_callback or self._get_default_config
@@ -171,12 +171,12 @@ class ResultsPanel(ttk.Frame):
             'tyre': {'mu': 1.6},
             'powertrain': {
                 'drivetrain': 'RWD',
-                'motor_power_kW': 80,
+                'motor_power_kW': 40,  # FS rules: 80 kW total (2 × 40 kW)
                 'motor_torque_Nm': 100,
                 'motor_rpm_max': 6000,
                 'motor_efficiency': 0.85,
                 'gear_ratio': 3.5,
-                'wheel_radius_m': 0.225,
+                'wheel_radius_m': 0.203,
             },
         }
 
@@ -570,12 +570,12 @@ class ResultsPanel(ttk.Frame):
             ax2.plot(x_left, y_left, 'k-', lw=1, alpha=0.5)
             ax2.plot(x_right, y_right, 'k-', lw=1, alpha=0.5)
 
-            # For skidpad (constant speed), set explicit color limits to avoid
-            # scientific notation in colorbar
+            # For skidpad (constant speed), set explicit colour limits to avoid
+            # scientific notation in colourbar
             v_mean = np.mean(v)
             v_range = np.max(v) - np.min(v)
             if v_range < 0.1:  # Nearly constant speed
-                # Set color limits with a small margin around the constant speed
+                # Set colour limits with a small margin around the constant speed
                 vmin = v_mean - 0.5
                 vmax = v_mean + 0.5
                 sc = ax2.scatter(track.x, track.y, c=v, cmap='RdYlGn', s=10, 

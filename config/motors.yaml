@@ -2,20 +2,25 @@
 # =====================================
 # Define motors here and reference them by key in vehicle configs.
 #
+# FS RULES:
+#   - Maximum total powertrain power: 80 kW
+#   - Maximum accumulator current: 500 A
+#
 # Weight calculation:
 #   total_powertrain_mass = (motor_weight_kg × n_motors) + powertrain_overhead_kg
 #   where n_motors = 2 for FWD/RWD, 4 for AWD
 
 motors:
   # Default motor (matches legacy 45kg powertrain: 20kg motors + 25kg overhead)
+  # For RWD (2 motors): 2 × 40 kW = 80 kW total (FS limit)
   default_motor:
-    name: "Default Motor Config"
+    name: "Default 40kW Motor"
     weight_kg: 10.0           # Per motor (2 × 10 = 20kg for RWD)
     peak_torque_Nm: 100
     motor_constant_Nm_A: 0.5  # Km = torque/current
     peak_current_A: 200
     peak_efficiency: 0.85
-    peak_power_kW: 80
+    peak_power_kW: 40         # 40 kW per motor (80 kW total for RWD)
     max_rpm: 6000
 
 

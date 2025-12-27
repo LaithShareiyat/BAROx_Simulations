@@ -11,8 +11,8 @@ The Bicycle Model:
     - Includes torque vectoring as an external yaw moment
 
 Coordinate System:
-    - x: forward (along vehicle centerline)
-    - y: leftward (perpendicular to centerline)
+    - x: forward (along vehicle centreline)
+    - y: leftward (perpendicular to centreline)
     - Positive yaw rate: counter-clockwise (turning left)
     - Positive lateral acceleration: leftward (turning left)
 
@@ -73,9 +73,9 @@ class BicycleModelState:
     # External moments
     M_z_tv: float         # Torque vectoring yaw moment [Nm]
 
-    # Grip utilization
-    grip_front: float     # Front grip utilization [0-1]
-    grip_rear: float      # Rear grip utilization [0-1]
+    # Grip utilisation
+    grip_front: float     # Front grip utilisation [0-1]
+    grip_rear: float      # Rear grip utilisation [0-1]
     saturated: bool       # True if either axle is saturated
 
 
@@ -155,7 +155,7 @@ def solve_qss_bicycle(vehicle: VehicleParams,
     # α_f = δ - β - (L_f × r) / V  →  δ = α_f + β + (L_f × r) / V
     delta = alpha_f + beta + (L_f * r) / V_safe
 
-    # Calculate grip utilization
+    # Calculate grip utilisation
     # Maximum lateral force limited by friction circle
     # For combined slip, reserve some grip for longitudinal force
     F_yf_max = mu * F_zf

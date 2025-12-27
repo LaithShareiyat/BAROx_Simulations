@@ -36,7 +36,8 @@ powertrain:
   # Motor selection (reference from config/motors.yaml)
   motor: default_motor    # Motor ID from motors.yaml database
   # Motor parameters (per motor) - auto-filled from motors.yaml if motor is specified
-  motor_power_kW: 80      # Power per motor [kW]
+  # NOTE: FS rules limit total powertrain power to 80 kW
+  motor_power_kW: 40      # Power per motor [kW] (2 × 40 = 80 kW total for RWD)
   motor_torque_Nm: 100    # Peak torque per motor [Nm]
   motor_rpm_max: 6000     # Maximum motor RPM
   motor_efficiency: 0.85  # Motor efficiency [0-1]
@@ -45,7 +46,7 @@ powertrain:
   powertrain_overhead_kg: 25.0  # Additional powertrain mass [kg]
   # Transmission
   gear_ratio: 3.5         # Final drive gear ratio (motor:wheel)
-  wheel_radius_m: 0.225   # Wheel radius [m] (18" tire)
+  wheel_radius_m: 0.203   # Wheel radius [m] (16" wheel)
   # Weight calculation:
   # Total powertrain mass = (motor_weight_kg × n_motors) + powertrain_overhead_kg
   # For RWD: (10.0 × 2) + 25.0 = 45 kg (matches mass_powertrain_kg default)
@@ -54,7 +55,7 @@ battery:
   capacity_kWh: 6         # Typical FS EV battery (5-7 kWh)
   initial_soc: 1.0        # Start fully charged
   min_soc: 0.1            # 10% minimum (safety factor)
-  max_discharge_kW: 160   # Match total motor power (2 × 80kW)
+  max_discharge_kW: 80    # Match total motor power (FS 80 kW limit)
   eta_discharge: 0.95     # Battery discharge efficiency (safety factor)
   # Current limiting (FS 2025 rules)
   nominal_voltage_V: 400  # Nominal pack voltage [V]

@@ -22,7 +22,7 @@ powertrain:
   motor_efficiency: 0.85  # Motor efficiency [0-1]
   # Transmission
   gear_ratio: 3.5         # Final drive gear ratio
-  wheel_radius_m: 0.225   # Wheel radius [m]
+  wheel_radius_m: 0.203   # Wheel radius [m] (16" wheel)
 
 battery:
   capacity_kWh: 2         # Typical FS EV battery (5-7 kWh)

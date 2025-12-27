@@ -53,7 +53,7 @@ def calculate_tv_yaw_moment(vehicle: VehicleParams,
     In cornering, torque vectoring shifts drive torque from the inside
     (less loaded) wheels to the outside (more loaded) wheels. This:
     1. Creates a yaw moment that helps turn the car
-    2. Better utilizes available grip at each wheel
+    2. Better utilises available grip at each wheel
 
     Args:
         vehicle: Vehicle parameters with torque vectoring config
@@ -129,8 +129,8 @@ def _load_proportional_split(vehicle: VehicleParams,
     """
     Distribute torque proportional to vertical load.
 
-    This maximizes traction by ensuring each wheel operates at the
-    same grip utilization level.
+    This maximises traction by ensuring each wheel operates at the
+    same grip utilisation level.
     """
     mu = vehicle.mu
     loads_dict = loads.as_dict()
@@ -161,7 +161,7 @@ def _load_proportional_split(vehicle: VehicleParams,
         limited_deviation = np.clip(deviation, -max_deviation, max_deviation)
         torque_split[w] = equal_split + limited_deviation * tv.effectiveness
 
-    # Normalize to sum to 1.0
+    # Normalise to sum to 1.0
     total_split = sum(torque_split.values())
     torque_split = {w: s / total_split for w, s in torque_split.items()}
 
@@ -333,7 +333,7 @@ def calculate_tv_traction_benefit(vehicle: VehicleParams,
     Calculate the traction improvement from torque vectoring.
 
     By distributing torque proportional to wheel load, TV allows
-    better utilization of available grip at each wheel.
+    better utilisation of available grip at each wheel.
 
     Args:
         vehicle: Vehicle parameters
