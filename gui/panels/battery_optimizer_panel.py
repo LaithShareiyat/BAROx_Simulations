@@ -304,6 +304,16 @@ class BatteryOptimizerPanel(ttk.Frame):
 
             self.constraint_vars[key] = var
 
+        # Checkbox to enable/disable mass constraint
+        row = len(constraints)
+        self.enforce_mass_constraint = tk.BooleanVar(value=True)
+        mass_check = ttk.Checkbutton(
+            frame,
+            text="Enforce mass limit",
+            variable=self.enforce_mass_constraint
+        )
+        mass_check.grid(row=row, column=0, columnspan=3, sticky='w', padx=5, pady=(8, 2))
+
     def _create_run_button(self, parent):
         """Create run optimisation button."""
         btn_frame = ttk.Frame(parent)
@@ -493,6 +503,7 @@ class BatteryOptimizerPanel(ttk.Frame):
             max_voltage = float(self.constraint_vars['max_voltage'].get())
             min_voltage = float(self.constraint_vars['min_voltage'].get())
             max_pack_mass = float(self.constraint_vars['max_pack_mass'].get())
+            enforce_mass_constraint = self.enforce_mass_constraint.get()
 
             # Import simulation modules
             from models.vehicle import (
@@ -518,7 +529,7 @@ class BatteryOptimizerPanel(ttk.Frame):
                 result = self._simulate_config(
                     pack_config, base_config, track, casing_factor,
                     fs_max_current, inverter_max_current, min_voltage_under_load,
-                    max_voltage, min_voltage, max_pack_mass
+                    max_voltage, min_voltage, max_pack_mass, enforce_mass_constraint
                 )
                 if result:
                     results.append(result)
@@ -549,7 +560,8 @@ class BatteryOptimizerPanel(ttk.Frame):
                          fs_max_current: float, inverter_max_current: float,
                          min_voltage_under_load: float,
                          max_voltage: float, min_voltage: float,
-                         max_pack_mass: float) -> Optional[OptimizationResult]:
+                         max_pack_mass: float,
+                         enforce_mass_constraint: bool = True) -> Optional[OptimizationResult]:
         """Simulate a single pack configuration with comprehensive validation.
 
         Args:
@@ -563,6 +575,7 @@ class BatteryOptimizerPanel(ttk.Frame):
             max_voltage: Maximum allowed voltage [V] (FS rules: 600V)
             min_voltage: Minimum nominal voltage [V]
             max_pack_mass: Maximum allowed pack mass [kg]
+            enforce_mass_constraint: If False, mass limit won't reject configurations
         """
         try:
             from models.vehicle import (
@@ -698,9 +711,11 @@ class BatteryOptimizerPanel(ttk.Frame):
                            exceeds_inverter_limit or voltage_too_low)
 
             # Pack is valid if: all constraints met
+            # Mass constraint is only applied if enforce_mass_constraint is True
+            mass_ok = not exceeds_max_mass if enforce_mass_constraint else True
             valid = (bv.sufficient and not power_limited and
                     not exceeds_max_voltage and not below_min_voltage and
-                    not exceeds_max_mass)
+                    mass_ok)
 
             return OptimizationResult(
                 config=pack_config,
