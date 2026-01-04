@@ -489,7 +489,13 @@ class BAROxGUI:
         # Powertrain info - handle both new and legacy formats
         pt = config['powertrain']
         if 'drivetrain' in pt:
-            n_motors = 4 if pt['drivetrain'] == 'AWD' else 2
+            drivetrain = pt['drivetrain']
+            if drivetrain == 'AWD':
+                n_motors = 4
+            elif drivetrain.startswith('1'):
+                n_motors = 1
+            else:
+                n_motors = 2
             total_power = pt['motor_power_kW'] * n_motors
             fx_max = (pt['motor_torque_Nm'] * n_motors * pt['gear_ratio']) / pt['wheel_radius_m']
             wheel_rpm = pt['motor_rpm_max'] / pt['gear_ratio']

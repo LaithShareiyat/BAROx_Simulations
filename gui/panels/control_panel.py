@@ -94,7 +94,8 @@ class ControlPanel(ttk.Frame):
             print(f"Warning: Could not load motor database: {e}")
             return {
                 'default_motor': {
-                    'name': 'Default Motor',
+                    'name': 'Default: 2x 40kW motors',
+                    'allowed_drivetrains': ['2RWD', '2FWD'],
                     'weight_kg': 10.0,
                     'peak_power_kW': 80,
                     'peak_torque_Nm': 100,
@@ -411,24 +412,33 @@ class ControlPanel(ttk.Frame):
         self.motor_widgets = [motor_label, self.motor_combo]
         row += 1
 
-        # Drivetrain selection (radio buttons)
+        # Drivetrain selection (dropdown)
         dt_label = ttk.Label(frame, text='Drivetrain', width=16, anchor='w')
         dt_label.grid(row=row, column=0, sticky='w', padx=5, pady=2)
         self.motor_widgets.append(dt_label)
 
-        dt_frame = ttk.Frame(frame)
-        dt_frame.grid(row=row, column=1, columnspan=2, sticky='w', padx=5, pady=2)
-        self.motor_widgets.append(dt_frame)
+        self.drivetrain_var = tk.StringVar(value=defaults.get('drivetrain', '2RWD'))
+        # Map legacy values to new format
+        if self.drivetrain_var.get() == 'RWD':
+            self.drivetrain_var.set('2RWD')
+        elif self.drivetrain_var.get() == 'FWD':
+            self.drivetrain_var.set('2FWD')
 
-        self.drivetrain_var = tk.StringVar(value=defaults.get('drivetrain', 'RWD'))
-        self.drivetrain_widgets = []
+        drivetrain_options = ['1FWD', '1RWD', '2FWD', '2RWD', 'AWD']
+        self.drivetrain_combo = ttk.Combobox(
+            frame, textvariable=self.drivetrain_var,
+            values=drivetrain_options, state='readonly', width=8
+        )
+        self.drivetrain_combo.grid(row=row, column=1, sticky='w', padx=5, pady=2)
+        self.drivetrain_combo.bind('<<ComboboxSelected>>', lambda e: self._on_drivetrain_change())
+        self.motor_widgets.append(self.drivetrain_combo)
 
-        drivetrains = [('FWD', 'FWD'), ('RWD', 'RWD'), ('AWD', 'AWD')]
-        for text, value in drivetrains:
-            rb = ttk.Radiobutton(dt_frame, text=text, variable=self.drivetrain_var,
-                                 value=value, command=self._on_drivetrain_change)
-            rb.pack(side='left', padx=5)
-            self.drivetrain_widgets.append(rb)
+        # Description label
+        self.drivetrain_desc_var = tk.StringVar(value='')
+        dt_desc = ttk.Label(frame, textvariable=self.drivetrain_desc_var, foreground='gray', width=20)
+        dt_desc.grid(row=row, column=2, sticky='w', pady=2)
+        self.motor_widgets.append(dt_desc)
+        self._update_drivetrain_description()
 
         self.param_entries['powertrain']['drivetrain'] = self.drivetrain_var
         row += 1
@@ -471,6 +481,26 @@ class ControlPanel(ttk.Frame):
         self.param_entries['powertrain']['powertrain_overhead_kg'] = overhead_var
         self.param_widgets['powertrain']['powertrain_overhead_kg'] = overhead_entry
         row += 1
+
+        # Differential mass - only shown for single-motor configs
+        self.diff_label = ttk.Label(frame, text='Differential', width=16, anchor='w')
+        self.diff_label.grid(row=row, column=0, sticky='w', padx=5, pady=2)
+
+        self.diff_mass_var = tk.StringVar(value='5.0')
+        self.diff_entry = ttk.Entry(frame, textvariable=self.diff_mass_var, width=10)
+        self.diff_entry.grid(row=row, column=1, sticky='w', padx=5, pady=2)
+        self.diff_entry.bind('<KeyRelease>', self._update_powertrain_display)
+
+        self.diff_unit_lbl = ttk.Label(frame, text='kg', foreground='gray', width=8)
+        self.diff_unit_lbl.grid(row=row, column=2, sticky='w', pady=2)
+
+        # Store references for show/hide
+        self.diff_widgets = [self.diff_label, self.diff_entry, self.diff_unit_lbl]
+        self.param_entries['powertrain']['differential_mass_kg'] = self.diff_mass_var
+        row += 1
+
+        # Initially hide differential field (shown when 1-motor selected)
+        self._update_differential_visibility()
 
         # Separator before motor specs
         sep1 = ttk.Separator(frame, orient='horizontal')
@@ -656,7 +686,28 @@ class ControlPanel(ttk.Frame):
                 self.param_entries['powertrain']['motor_weight_kg'].set(
                     str(motor.get('weight_kg', 10.0)))
 
+            # Update allowed drivetrains based on motor
+            self._update_allowed_drivetrains(motor)
+
         self._update_powertrain_display()
+
+    def _update_allowed_drivetrains(self, motor: dict):
+        """Update drivetrain dropdown based on motor's allowed configurations."""
+        if not hasattr(self, 'drivetrain_combo'):
+            return
+
+        # Get allowed drivetrains from motor config (default: all)
+        all_drivetrains = ['1FWD', '1RWD', '2FWD', '2RWD', 'AWD']
+        allowed = motor.get('allowed_drivetrains', all_drivetrains)
+
+        # Update combobox values
+        self.drivetrain_combo['values'] = allowed
+
+        # If current selection is not in allowed list, switch to first allowed
+        current = self.drivetrain_var.get()
+        if current not in allowed:
+            self.drivetrain_var.set(allowed[0])
+            self._on_drivetrain_change()
 
     def _create_torque_vectoring_section(self):
         """Create torque vectoring section (visible in custom mode only)."""
@@ -737,22 +788,28 @@ class ControlPanel(ttk.Frame):
     def _update_tv_state(self):
         """Enable/disable TV parameter entries based on TV checkbox and drivetrain."""
         is_custom = self.config_var.get() == 'custom'
-        drivetrain = self.drivetrain_var.get() if hasattr(self, 'drivetrain_var') else 'RWD'
-        is_fwd = drivetrain == 'FWD'
+        drivetrain = self.drivetrain_var.get() if hasattr(self, 'drivetrain_var') else '2RWD'
+        n_motors = self._get_n_motors(drivetrain)
+
+        # TV not available for single-motor configs (mechanical differential)
+        # or front-wheel drive (steering/drive conflict)
+        is_single_motor = n_motors == 1
+        is_fwd = drivetrain in ('FWD', '2FWD', '1FWD')
+        tv_not_available = is_single_motor or is_fwd
         tv_enabled = self.tv_enabled.get()
 
-        # If FWD is selected, force TV off and disable the checkbox
-        if is_fwd and tv_enabled:
+        # If TV not available, force TV off and disable the checkbox
+        if tv_not_available and tv_enabled:
             self.tv_enabled.set(False)
             tv_enabled = False
 
-        # TV checkbox: disabled if not custom mode OR if FWD is selected
-        checkbox_state = 'normal' if (is_custom and not is_fwd) else 'disabled'
+        # TV checkbox: disabled if not custom mode OR if TV not available
+        checkbox_state = 'normal' if (is_custom and not tv_not_available) else 'disabled'
         if hasattr(self, 'tv_checkbox'):
             self.tv_checkbox.configure(state=checkbox_state)
 
-        # Only enable TV params if: custom mode AND TV enabled AND not FWD
-        state = 'normal' if (is_custom and tv_enabled and not is_fwd) else 'disabled'
+        # Only enable TV params if: custom mode AND TV enabled AND TV available
+        state = 'normal' if (is_custom and tv_enabled and not tv_not_available) else 'disabled'
 
         for widget in self.tv_widgets:
             if isinstance(widget, ttk.Entry):
@@ -763,10 +820,52 @@ class ControlPanel(ttk.Frame):
             for rb in self.tv_strategy_widgets:
                 rb.configure(state=state)
 
+    def _update_drivetrain_description(self):
+        """Update the drivetrain description label."""
+        if not hasattr(self, 'drivetrain_desc_var'):
+            return
+        drivetrain = self.drivetrain_var.get()
+        descriptions = {
+            '1FWD': '1 motor + diff, front',
+            '1RWD': '1 motor + diff, rear',
+            '2FWD': '2 motors, front axle',
+            '2RWD': '2 motors, rear axle',
+            'AWD': '4 motors, all wheels',
+            # Legacy support
+            'FWD': '2 motors, front axle',
+            'RWD': '2 motors, rear axle',
+        }
+        self.drivetrain_desc_var.set(descriptions.get(drivetrain, ''))
+
+    def _update_differential_visibility(self):
+        """Show/hide differential mass field based on drivetrain selection."""
+        if not hasattr(self, 'diff_widgets'):
+            return
+        drivetrain = self.drivetrain_var.get() if hasattr(self, 'drivetrain_var') else '2RWD'
+        is_single_motor = drivetrain.startswith('1')
+
+        for widget in self.diff_widgets:
+            if is_single_motor:
+                widget.grid()  # Show
+            else:
+                widget.grid_remove()  # Hide but keep grid position
+
+    def _get_n_motors(self, drivetrain: str) -> int:
+        """Get number of motors for a drivetrain configuration."""
+        if drivetrain == 'AWD':
+            return 4
+        elif drivetrain.startswith('1'):
+            return 1
+        else:
+            # '2FWD', '2RWD', 'FWD', 'RWD' all have 2 motors
+            return 2
+
     def _on_drivetrain_change(self):
         """Handle drivetrain selection change."""
+        self._update_drivetrain_description()
+        self._update_differential_visibility()
         self._update_powertrain_display()
-        # Update TV state (disable if FWD selected)
+        # Update TV state (disable if FWD or single-motor selected)
         if hasattr(self, 'tv_enabled'):
             self._update_tv_state()
 
@@ -774,7 +873,7 @@ class ControlPanel(ttk.Frame):
         """Update calculated powertrain values based on inputs."""
         try:
             drivetrain = self.drivetrain_var.get()
-            n_motors = 4 if drivetrain == 'AWD' else 2
+            n_motors = self._get_n_motors(drivetrain)
 
             motor_power = float(self.param_entries['powertrain']['motor_power_kW'].get())
             motor_torque = float(self.param_entries['powertrain']['motor_torque_Nm'].get())
@@ -786,7 +885,16 @@ class ControlPanel(ttk.Frame):
             motor_weight = float(self.param_entries['powertrain']['motor_weight_kg'].get())
             overhead = float(self.param_entries['powertrain']['powertrain_overhead_kg'].get())
             motor_mass_total = motor_weight * n_motors
-            pt_mass_total = motor_mass_total + overhead
+
+            # Add differential mass for single-motor configs
+            diff_mass = 0.0
+            if drivetrain.startswith('1') and hasattr(self, 'diff_mass_var'):
+                try:
+                    diff_mass = float(self.diff_mass_var.get())
+                except ValueError:
+                    diff_mass = 0.0
+
+            pt_mass_total = motor_mass_total + overhead + diff_mass
 
             total_power = motor_power * n_motors
             fx_max = (motor_torque * n_motors * gear_ratio) / wheel_radius if wheel_radius > 0 else 0
@@ -1144,10 +1252,16 @@ class ControlPanel(ttk.Frame):
                         self._on_motor_change()
                         break
 
-            # Set drivetrain
+            # Set drivetrain (map legacy values to new format)
             if hasattr(self, 'drivetrain_var'):
-                drivetrain = config['powertrain'].get('drivetrain', 'RWD')
+                drivetrain = config['powertrain'].get('drivetrain', '2RWD')
+                # Map legacy values
+                if drivetrain == 'RWD':
+                    drivetrain = '2RWD'
+                elif drivetrain == 'FWD':
+                    drivetrain = '2FWD'
                 self.drivetrain_var.set(drivetrain)
+                self._update_drivetrain_description()
 
             self._update_powertrain_display()
 

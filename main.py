@@ -263,15 +263,23 @@ def get_custom_vehicle_params(defaults: dict) -> dict:
         inquirer.List('drivetrain',
                       message="Select drivetrain configuration",
                       choices=[
-                          ('2WD Rear (RWD)', 'RWD'),
-                          ('2WD Front (FWD)', 'FWD'),
-                          ('4WD All-Wheel (AWD)', 'AWD'),
+                          ('1 Motor Rear (1RWD) - with differential', '1RWD'),
+                          ('1 Motor Front (1FWD) - with differential', '1FWD'),
+                          ('2 Motor Rear (2RWD)', '2RWD'),
+                          ('2 Motor Front (2FWD)', '2FWD'),
+                          ('4 Motor All-Wheel (AWD)', 'AWD'),
                       ],
-                      default='RWD'),
+                      default='2RWD'),
     ]
     drivetrain_answer = inquirer.prompt(drivetrain_question)
     drivetrain = drivetrain_answer['drivetrain']
-    n_motors = 4 if drivetrain == 'AWD' else 2
+    # Calculate number of motors from drivetrain
+    if drivetrain == 'AWD':
+        n_motors = 4
+    elif drivetrain.startswith('1'):
+        n_motors = 1
+    else:
+        n_motors = 2
 
     # Motor parameters
     pt_defaults = defaults.get('powertrain', {
@@ -479,7 +487,13 @@ def print_vehicle_params(config: dict):
     pt = config['powertrain']
     if 'drivetrain' in pt:
         # New extended format
-        n_motors = 4 if pt['drivetrain'] == 'AWD' else 2
+        drivetrain = pt['drivetrain']
+        if drivetrain == 'AWD':
+            n_motors = 4
+        elif drivetrain.startswith('1'):
+            n_motors = 1
+        else:
+            n_motors = 2
         total_power = pt['motor_power_kW'] * n_motors
         fx_max = (pt['motor_torque_Nm'] * n_motors * pt['gear_ratio']) / pt['wheel_radius_m']
         wheel_rpm = pt['motor_rpm_max'] / pt['gear_ratio']

@@ -32,24 +32,28 @@ geometry:
 
 powertrain:
   # Drivetrain configuration
-  drivetrain: RWD         # FWD (front), RWD (rear), or AWD (all-wheel)
+  # Options: 1FWD, 1RWD (single motor + differential)
+  #          2FWD, 2RWD, FWD, RWD (dual motor, one per wheel)
+  #          AWD (4 motors, all wheels)
+  drivetrain: 2RWD        # 2 motors, rear axle
   # Motor selection (reference from config/motors.yaml)
   motor: default_motor    # Motor ID from motors.yaml database
   # Motor parameters (per motor) - auto-filled from motors.yaml if motor is specified
   # NOTE: FS rules limit total powertrain power to 80 kW
-  motor_power_kW: 40      # Power per motor [kW] (2 × 40 = 80 kW total for RWD)
+  motor_power_kW: 40      # Power per motor [kW] (2 × 40 = 80 kW total for 2RWD)
   motor_torque_Nm: 100    # Peak torque per motor [Nm]
   motor_rpm_max: 6000     # Maximum motor RPM
   motor_efficiency: 0.85  # Motor efficiency [0-1]
   motor_weight_kg: 10.0   # Weight per motor [kg]
-  # Powertrain overhead (inverters, wiring, cooling, mounts)
+  # Powertrain overhead (inverters, wiring, cooling, mounts, differential for 1-motor)
   powertrain_overhead_kg: 25.0  # Additional powertrain mass [kg]
   # Transmission
   gear_ratio: 3.5         # Final drive gear ratio (motor:wheel)
   wheel_radius_m: 0.203   # Wheel radius [m] (16" wheel)
   # Weight calculation:
   # Total powertrain mass = (motor_weight_kg × n_motors) + powertrain_overhead_kg
-  # For RWD: (10.0 × 2) + 25.0 = 45 kg (matches mass_powertrain_kg default)
+  # For 2RWD: (10.0 × 2) + 25.0 = 45 kg (matches mass_powertrain_kg default)
+  # For 1RWD: (10.0 × 1) + 30.0 = 40 kg (overhead includes differential ~5 kg)
 
 battery:
   capacity_kWh: 6         # Typical FS EV battery (5-7 kWh)
