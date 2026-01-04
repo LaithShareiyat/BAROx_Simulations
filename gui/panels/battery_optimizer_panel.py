@@ -235,9 +235,9 @@ class BatteryOptimizerPanel(ttk.Frame):
         series_frame = ttk.Frame(frame)
         series_frame.grid(row=row, column=1, columnspan=2, sticky='w', padx=5, pady=2)
 
-        self.sweep_vars['series_min'] = tk.StringVar(value='100')
-        self.sweep_vars['series_max'] = tk.StringVar(value='142')
-        self.sweep_vars['series_step'] = tk.StringVar(value='2')
+        self.sweep_vars['series_min'] = tk.StringVar(value='0')
+        self.sweep_vars['series_max'] = tk.StringVar(value='150')
+        self.sweep_vars['series_step'] = tk.StringVar(value='1')
 
         ttk.Entry(series_frame, textvariable=self.sweep_vars['series_min'], width=5).pack(side='left')
         ttk.Label(series_frame, text=' to ').pack(side='left')
@@ -253,8 +253,8 @@ class BatteryOptimizerPanel(ttk.Frame):
         parallel_frame = ttk.Frame(frame)
         parallel_frame.grid(row=row, column=1, columnspan=2, sticky='w', padx=5, pady=2)
 
-        self.sweep_vars['parallel_min'] = tk.StringVar(value='3')
-        self.sweep_vars['parallel_max'] = tk.StringVar(value='6')
+        self.sweep_vars['parallel_min'] = tk.StringVar(value='1')
+        self.sweep_vars['parallel_max'] = tk.StringVar(value='15')
         self.sweep_vars['parallel_step'] = tk.StringVar(value='1')
 
         ttk.Entry(parallel_frame, textvariable=self.sweep_vars['parallel_min'], width=5).pack(side='left')
