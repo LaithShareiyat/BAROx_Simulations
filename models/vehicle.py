@@ -89,14 +89,17 @@ class EVPowertrainParams:
     Extended powertrain parameters with drivetrain configuration.
 
     Drivetrain types:
-    - 'FWD': Front-wheel drive (2 motors on front axle)
-    - 'RWD': Rear-wheel drive (2 motors on rear axle)
+    - '1FWD': Single motor front-wheel drive (1 motor + differential)
+    - '1RWD': Single motor rear-wheel drive (1 motor + differential)
+    - '2FWD' or 'FWD': Dual motor front-wheel drive (2 motors on front axle)
+    - '2RWD' or 'RWD': Dual motor rear-wheel drive (2 motors on rear axle)
     - 'AWD': All-wheel drive (4 motors, 2 front + 2 rear)
 
     Weight calculation:
         total_powertrain_mass = (motor_weight_kg × n_motors) + powertrain_overhead_kg
+        Note: For single motor configs, powertrain_overhead should include differential mass
     """
-    drivetrain: str           # 'FWD', 'RWD', or 'AWD'
+    drivetrain: str           # '1FWD', '1RWD', '2FWD', '2RWD', 'FWD', 'RWD', or 'AWD'
     motor_power_kW: float     # Power per motor [kW]
     motor_torque_Nm: float    # Peak torque per motor [Nm]
     motor_rpm_max: float      # Maximum motor RPM
@@ -108,13 +111,38 @@ class EVPowertrainParams:
     motor_weight_kg: float = 10.0      # Weight per motor [kg]
     motor_constant_Nm_A: float = 0.5   # Torque constant Km [Nm/A]
     peak_current_A: float = 200.0      # Peak motor current [A]
-    # Powertrain overhead (inverters, wiring, cooling, mounts)
+    # Powertrain overhead (inverters, wiring, cooling, mounts, differential for 1-motor)
     powertrain_overhead_kg: float = 25.0  # Additional powertrain mass [kg]
 
     @property
     def n_motors(self) -> int:
         """Number of motors based on drivetrain configuration."""
-        return 4 if self.drivetrain == 'AWD' else 2
+        if self.drivetrain == 'AWD':
+            return 4
+        elif self.drivetrain.startswith('1'):
+            return 1
+        else:
+            # '2FWD', '2RWD', 'FWD', 'RWD' all have 2 motors
+            return 2
+
+    @property
+    def driven_axle(self) -> str:
+        """Which axle is driven: 'front', 'rear', or 'both'."""
+        if self.drivetrain in ('AWD',):
+            return 'both'
+        elif self.drivetrain in ('1FWD', '2FWD', 'FWD'):
+            return 'front'
+        else:  # '1RWD', '2RWD', 'RWD'
+            return 'rear'
+
+    @property
+    def has_torque_vectoring_capability(self) -> bool:
+        """Whether this drivetrain can perform torque vectoring.
+
+        Single motor configurations use a mechanical differential
+        and cannot perform electronic torque vectoring.
+        """
+        return self.n_motors >= 2
 
     @property
     def P_max(self) -> float:

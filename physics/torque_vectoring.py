@@ -89,12 +89,24 @@ def calculate_tv_yaw_moment(vehicle: VehicleParams,
     loads = calculate_wheel_loads(vehicle, a_x, a_y)
 
     # Determine driven wheels based on drivetrain
-    drivetrain = vehicle.powertrain.drivetrain if vehicle.has_extended_powertrain else 'RWD'
+    drivetrain = vehicle.powertrain.drivetrain if vehicle.has_extended_powertrain else '2RWD'
 
-    if drivetrain == 'FWD':
+    # Check if single motor (TV not available with mechanical differential)
+    is_single_motor = drivetrain.startswith('1')
+    if is_single_motor:
+        # Single motor configs can't do torque vectoring
+        return TorqueVectoringOutput(
+            M_z=0.0,
+            torque_split={'FL': 0.0, 'FR': 0.0, 'RL': 0.5, 'RR': 0.5} if 'RWD' in drivetrain else {'FL': 0.5, 'FR': 0.5, 'RL': 0.0, 'RR': 0.0},
+            F_x_per_wheel={'FL': 0.0, 'FR': 0.0, 'RL': 0.0, 'RR': 0.0},
+            effectiveness_used=0.0,
+            limited=False,
+        )
+
+    if drivetrain in ('FWD', '2FWD', '1FWD'):
         driven_wheels = ['FL', 'FR']
         track = t_f
-    elif drivetrain == 'RWD':
+    elif drivetrain in ('RWD', '2RWD', '1RWD'):
         driven_wheels = ['RL', 'RR']
         track = t_r
     else:  # AWD
@@ -353,13 +365,17 @@ def calculate_tv_traction_benefit(vehicle: VehicleParams,
     loads = calculate_wheel_loads(vehicle, a_x, a_y)
 
     # Determine driven wheels
-    drivetrain = vehicle.powertrain.drivetrain if vehicle.has_extended_powertrain else 'RWD'
+    drivetrain = vehicle.powertrain.drivetrain if vehicle.has_extended_powertrain else '2RWD'
 
-    if drivetrain == 'FWD':
+    # Single motor configs can't benefit from TV traction improvement
+    if drivetrain.startswith('1'):
+        return 1.0
+
+    if drivetrain in ('FWD', '2FWD'):
         driven = ['FL', 'FR']
-    elif drivetrain == 'RWD':
+    elif drivetrain in ('RWD', '2RWD'):
         driven = ['RL', 'RR']
-    else:
+    else:  # AWD
         driven = ['FL', 'FR', 'RL', 'RR']
 
     loads_dict = loads.as_dict()

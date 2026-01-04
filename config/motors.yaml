@@ -8,13 +8,16 @@
 #
 # Weight calculation:
 #   total_powertrain_mass = (motor_weight_kg × n_motors) + powertrain_overhead_kg
-#   where n_motors = 2 for FWD/RWD, 4 for AWD
+#   where n_motors = 1 for 1FWD/1RWD, 2 for 2FWD/2RWD, 4 for AWD
+#   Note: For 1-motor configs, powertrain_overhead should include differential mass
 
 motors:
   # Default motor (matches legacy 45kg powertrain: 20kg motors + 25kg overhead)
-  # For RWD (2 motors): 2 × 40 kW = 80 kW total (FS limit)
+  # For 2RWD (2 motors): 2 × 40 kW = 80 kW total (FS limit)
+  # NOTE: This motor only supports 2RWD and 2FWD drivetrains
   default_motor:
-    name: "Default: two 40kW Motors"
+    name: "Default: 2x 40kW motors"
+    allowed_drivetrains: ['2RWD', '2FWD']  # Restrict to 2-motor configs
     weight_kg: 10.0           # Per motor (2 × 10 = 20kg for RWD)
     peak_torque_Nm: 100
     motor_constant_Nm_A: 0.5  # Km = torque/current
