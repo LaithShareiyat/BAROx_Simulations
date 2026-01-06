@@ -5,6 +5,7 @@ import threading
 import os
 import sys
 import numpy as np
+from PIL import Image, ImageTk
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -56,8 +57,78 @@ class BAROxGUI:
         # Invalid entry style
         style.configure('Invalid.TEntry', fieldbackground='#ffcccc')
 
+    def _create_logo_banner(self):
+        """Create the logo banner at the top of the window."""
+        # Get path to logo
+        logo_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            'resources', 'BAROx_Logo.png'
+        )
+
+        # Create banner frame with Oxford Blue background
+        self.banner_frame = tk.Frame(self.root, bg='#12243e', height=70)
+        self.banner_frame.pack(fill='x', side='top', padx=5, pady=(5, 0))
+        self.banner_frame.pack_propagate(False)  # Maintain fixed height
+
+        if os.path.exists(logo_path):
+            try:
+                # Load and resize logo
+                original_image = Image.open(logo_path)
+
+                # Calculate new dimensions maintaining aspect ratio
+                banner_height = 60
+                aspect_ratio = original_image.width / original_image.height
+                new_width = int(banner_height * aspect_ratio)
+
+                # Resize with high-quality resampling
+                resized_image = original_image.resize(
+                    (new_width, banner_height),
+                    Image.Resampling.LANCZOS
+                )
+
+                # Convert to PhotoImage and store reference
+                self.logo_image = ImageTk.PhotoImage(resized_image)
+
+                # Create label with logo
+                logo_label = tk.Label(
+                    self.banner_frame,
+                    image=self.logo_image,
+                    bg='#12243e'
+                )
+                logo_label.pack(side='left', padx=10, pady=5)
+
+                # Add application title on the right side
+                title_label = tk.Label(
+                    self.banner_frame,
+                    text="Lap Time Simulator",
+                    font=('Segoe UI', 16, 'bold'),
+                    fg='white',
+                    bg='#12243e'
+                )
+                title_label.pack(side='right', padx=20, pady=5)
+
+            except Exception as e:
+                # Fallback to text-only banner if image fails
+                self._create_text_banner()
+        else:
+            self._create_text_banner()
+
+    def _create_text_banner(self):
+        """Create a text-only banner as fallback."""
+        title_label = tk.Label(
+            self.banner_frame,
+            text="BAROx - Formula Student Lap Time Simulator",
+            font=('Segoe UI', 14, 'bold'),
+            fg='white',
+            bg='#12243e'
+        )
+        title_label.pack(expand=True)
+
     def _create_layout(self):
         """Create the main application layout."""
+        # Create logo banner at the top
+        self._create_logo_banner()
+
         # Main paned window for resizable panels
         self.paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
         self.paned.pack(fill='both', expand=True, padx=5, pady=5)
@@ -587,14 +658,22 @@ def main():
     """Main entry point for the GUI."""
     root = tk.Tk()
 
-    # Set icon if available
+    # Set window icon using the dedicated icon file
     try:
         icon_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
-            'assets', 'icon.ico'
+            'resources', 'BAROx Icon.png'
         )
         if os.path.exists(icon_path):
-            root.iconbitmap(icon_path)
+            # Load icon image
+            icon_image = Image.open(icon_path)
+            # Resize to standard icon size
+            icon_size = 64
+            icon_image.thumbnail((icon_size, icon_size), Image.Resampling.LANCZOS)
+            icon_photo = ImageTk.PhotoImage(icon_image)
+            root.iconphoto(True, icon_photo)
+            # Keep reference to prevent garbage collection
+            root._icon_photo = icon_photo
     except Exception:
         pass
 
