@@ -132,9 +132,9 @@ class OptimizationResult:
     final_soc: float
     sufficient: bool
     total_vehicle_mass: float
-    peak_power_kW: float                # Peak DEMANDED power (before limiting)
+    peak_power_kW: float                # Peak DEMANDED power (before any limiting)
     power_limited: bool                 # True if peak demand > pack max power
-    peak_current_A: float               # Peak DEMANDED current (before limiting)
+    peak_current_A: float               # Peak current (based on effective power)
     # Voltage and power loss fields
     voltage_loss_V: float = 0.0         # Voltage drop under peak current [V]
     voltage_under_load_V: float = 0.0   # Actual voltage at peak current [V]
@@ -145,6 +145,10 @@ class OptimizationResult:
     exceeds_max_voltage: bool = False   # True if V_max > max voltage constraint
     below_min_voltage: bool = False     # True if V_nom < min voltage constraint
     exceeds_max_mass: bool = False      # True if pack mass > max mass constraint
+    # Imposed power limit
+    imposed_limit_kW: float = None      # The user-imposed power limit (None if no limit)
+    effective_power_kW: float = None    # Effective power after user-imposed limit (None if no limit)
+    power_limit_active: bool = False    # True if user-imposed limit is capping the power
 
 
 class BatteryOptimizerPanel(ttk.Frame):
@@ -314,6 +318,74 @@ class BatteryOptimizerPanel(ttk.Frame):
         )
         mass_check.grid(row=row, column=0, columnspan=3, sticky='w', padx=5, pady=(8, 2))
 
+        # Power limit section
+        row += 1
+        ttk.Separator(frame, orient='horizontal').grid(
+            row=row, column=0, columnspan=3, sticky='ew', pady=(10, 5))
+
+        row += 1
+        self.enforce_power_limit = tk.BooleanVar(value=False)
+        power_check = ttk.Checkbutton(
+            frame,
+            text="Impose power draw limit",
+            variable=self.enforce_power_limit,
+            command=self._on_power_limit_toggle
+        )
+        power_check.grid(row=row, column=0, columnspan=3, sticky='w', padx=5, pady=(5, 2))
+
+        # Power limit sweep checkbox
+        row += 1
+        self.power_limit_sweep_enabled = tk.BooleanVar(value=False)
+        self.power_sweep_check = ttk.Checkbutton(
+            frame,
+            text="Sweep power limits",
+            variable=self.power_limit_sweep_enabled,
+            command=self._on_power_limit_toggle
+        )
+        self.power_sweep_check.grid(row=row, column=0, columnspan=3, sticky='w', padx=20, pady=(2, 2))
+
+        # Single power limit value (shown when sweep is disabled)
+        row += 1
+        self.power_limit_single_frame = ttk.Frame(frame)
+        self.power_limit_single_frame.grid(row=row, column=0, columnspan=3, sticky='w', padx=5, pady=2)
+
+        self.power_limit_label = ttk.Label(self.power_limit_single_frame, text="Max Power Draw", width=14, anchor='w')
+        self.power_limit_label.pack(side='left')
+
+        self.constraint_vars['power_limit'] = tk.StringVar(value='50')
+        self.power_limit_entry = ttk.Entry(
+            self.power_limit_single_frame, textvariable=self.constraint_vars['power_limit'], width=10)
+        self.power_limit_entry.pack(side='left', padx=5)
+
+        self.power_limit_unit = ttk.Label(self.power_limit_single_frame, text='kW', foreground='gray', width=6)
+        self.power_limit_unit.pack(side='left')
+
+        # Power limit sweep range (shown when sweep is enabled)
+        row += 1
+        self.power_limit_sweep_frame = ttk.Frame(frame)
+        self.power_limit_sweep_frame.grid(row=row, column=0, columnspan=3, sticky='w', padx=5, pady=2)
+
+        ttk.Label(self.power_limit_sweep_frame, text="Power Range", width=14, anchor='w').pack(side='left')
+
+        self.power_sweep_vars = {}
+        self.power_sweep_vars['min'] = tk.StringVar(value='30')
+        self.power_sweep_vars['max'] = tk.StringVar(value='80')
+        self.power_sweep_vars['step'] = tk.StringVar(value='10')
+
+        ttk.Entry(self.power_limit_sweep_frame, textvariable=self.power_sweep_vars['min'], width=5).pack(side='left')
+        ttk.Label(self.power_limit_sweep_frame, text=' to ').pack(side='left')
+        ttk.Entry(self.power_limit_sweep_frame, textvariable=self.power_sweep_vars['max'], width=5).pack(side='left')
+        ttk.Label(self.power_limit_sweep_frame, text=' step ').pack(side='left')
+        ttk.Entry(self.power_limit_sweep_frame, textvariable=self.power_sweep_vars['step'], width=4).pack(side='left')
+        ttk.Label(self.power_limit_sweep_frame, text=' kW', foreground='gray').pack(side='left')
+
+        # Bind updates for config count
+        for var in self.power_sweep_vars.values():
+            var.trace_add('write', self._update_config_count)
+
+        # Initially disable power limit controls (checkbox is off by default)
+        self._on_power_limit_toggle()
+
     def _create_run_button(self, parent):
         """Create run optimisation button."""
         btn_frame = ttk.Frame(parent)
@@ -363,12 +435,13 @@ class BatteryOptimizerPanel(ttk.Frame):
         table_frame.pack(fill='both', expand=True, pady=5)
 
         # Treeview for results - updated columns
-        columns = ('config', 'cells', 'V_nom', 'V_load', 'I_peak', 'I2R', 'kWh', 'mass', 'lap', 'status')
+        columns = ('config', 'cells', 'P_lim', 'V_nom', 'V_load', 'I_peak', 'I2R', 'kWh', 'mass', 'lap', 'status')
         self.results_tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=15)
 
         # Column headings
         self.results_tree.heading('config', text='Config')
         self.results_tree.heading('cells', text='Cells')
+        self.results_tree.heading('P_lim', text='P lim')
         self.results_tree.heading('V_nom', text='V nom')
         self.results_tree.heading('V_load', text='V load')
         self.results_tree.heading('I_peak', text='I peak')
@@ -381,6 +454,7 @@ class BatteryOptimizerPanel(ttk.Frame):
         # Column widths
         self.results_tree.column('config', width=65, anchor='center')
         self.results_tree.column('cells', width=45, anchor='center')
+        self.results_tree.column('P_lim', width=45, anchor='center')
         self.results_tree.column('V_nom', width=50, anchor='center')
         self.results_tree.column('V_load', width=50, anchor='center')
         self.results_tree.column('I_peak', width=50, anchor='center')
@@ -411,15 +485,68 @@ class BatteryOptimizerPanel(ttk.Frame):
             p_max = int(self.sweep_vars['parallel_max'].get())
             p_step = max(1, int(self.sweep_vars['parallel_step'].get()))
 
+            # Get power sweep count (if enabled)
+            power_count = 1
+            if (hasattr(self, 'enforce_power_limit') and
+                hasattr(self, 'power_limit_sweep_enabled') and
+                self.enforce_power_limit.get() and
+                self.power_limit_sweep_enabled.get()):
+                pwr_min = int(self.power_sweep_vars['min'].get())
+                pwr_max = int(self.power_sweep_vars['max'].get())
+                pwr_step = max(1, int(self.power_sweep_vars['step'].get()))
+                power_count = len(range(pwr_min, pwr_max + 1, pwr_step))
+
             # Count all configurations
             total_count = 0
             for series in range(s_min, s_max + 1, s_step):
                 for parallel in range(p_min, p_max + 1, p_step):
                     total_count += 1
 
+            # Multiply by power sweep count
+            total_count *= power_count
+
             self.config_count_var.set(f"{total_count}")
         except (ValueError, KeyError):
             self.config_count_var.set("—")
+
+    def _on_power_limit_toggle(self):
+        """Enable/disable power limit controls based on checkbox states."""
+        power_enabled = self.enforce_power_limit.get()
+        sweep_enabled = self.power_limit_sweep_enabled.get()
+
+        if power_enabled:
+            # Enable the sweep checkbox
+            self.power_sweep_check.configure(state='normal')
+
+            if sweep_enabled:
+                # Show sweep controls, hide single value
+                self.power_limit_single_frame.grid_remove()
+                self.power_limit_sweep_frame.grid()
+                # Enable sweep entries
+                for child in self.power_limit_sweep_frame.winfo_children():
+                    if isinstance(child, ttk.Entry):
+                        child.configure(state='normal')
+            else:
+                # Show single value, hide sweep controls
+                self.power_limit_sweep_frame.grid_remove()
+                self.power_limit_single_frame.grid()
+                self.power_limit_entry.configure(state='normal')
+                self.power_limit_label.configure(foreground='')
+                self.power_limit_unit.configure(foreground='')
+        else:
+            # Disable everything
+            self.power_sweep_check.configure(state='disabled')
+            self.power_limit_sweep_enabled.set(False)
+
+            # Show single value (disabled), hide sweep
+            self.power_limit_sweep_frame.grid_remove()
+            self.power_limit_single_frame.grid()
+            self.power_limit_entry.configure(state='disabled')
+            self.power_limit_label.configure(foreground='gray')
+            self.power_limit_unit.configure(foreground='gray')
+
+        # Update config count when toggling
+        self._update_config_count()
 
     def _get_cell_spec(self) -> CellSpec:
         """Get cell specifications from inputs."""
@@ -475,6 +602,7 @@ class BatteryOptimizerPanel(ttk.Frame):
         self.status_var.set("Starting optimisation...")
         self.results = []
         self.best_result = None
+        self.best_is_valid = False
 
         # Clear previous results
         for item in self.results_tree.get_children():
@@ -505,6 +633,22 @@ class BatteryOptimizerPanel(ttk.Frame):
             max_pack_mass = float(self.constraint_vars['max_pack_mass'].get())
             enforce_mass_constraint = self.enforce_mass_constraint.get()
 
+            # Power limit settings
+            enforce_power_limit = self.enforce_power_limit.get()
+            power_sweep_enabled = self.power_limit_sweep_enabled.get() if enforce_power_limit else False
+
+            # Build list of power limits to test
+            if enforce_power_limit:
+                if power_sweep_enabled:
+                    pwr_min = int(self.power_sweep_vars['min'].get())
+                    pwr_max = int(self.power_sweep_vars['max'].get())
+                    pwr_step = max(1, int(self.power_sweep_vars['step'].get()))
+                    power_limits = list(range(pwr_min, pwr_max + 1, pwr_step))
+                else:
+                    power_limits = [float(self.constraint_vars['power_limit'].get())]
+            else:
+                power_limits = [None]  # No power limit
+
             # Import simulation modules
             from models.vehicle import (
                 VehicleParams, AeroParams, TyreParamsMVP, TyreParams,
@@ -518,32 +662,65 @@ class BatteryOptimizerPanel(ttk.Frame):
             # Build track once
             track, _ = build_standard_autocross()
 
-            results = []
-            for i, pack_config in enumerate(configs):
-                # Update progress
-                progress = ((i + 1) / total) * 100
-                self.winfo_toplevel().after(0, lambda p=progress, c=pack_config:
-                    self._update_progress(p, f"Testing {c.config_name}..."))
+            # Calculate total iterations
+            total_iterations = len(configs) * len(power_limits)
 
-                # Create modified vehicle config
-                result = self._simulate_config(
-                    pack_config, base_config, track, casing_factor,
-                    fs_max_current, inverter_max_current, min_voltage_under_load,
-                    max_voltage, min_voltage, max_pack_mass, enforce_mass_constraint
-                )
-                if result:
-                    results.append(result)
-                    self.winfo_toplevel().after(0, lambda r=result: self._add_result_row(r))
+            results = []
+            iteration = 0
+            for pack_config in configs:
+                for power_limit in power_limits:
+                    iteration += 1
+                    # Update progress
+                    progress = (iteration / total_iterations) * 100
+                    if power_limit is not None:
+                        status_msg = f"Testing {pack_config.config_name} @ {power_limit}kW..."
+                    else:
+                        status_msg = f"Testing {pack_config.config_name}..."
+                    self.winfo_toplevel().after(0, lambda p=progress, s=status_msg:
+                        self._update_progress(p, s))
+
+                    # Create modified vehicle config
+                    result = self._simulate_config(
+                        pack_config, base_config, track, casing_factor,
+                        fs_max_current, inverter_max_current, min_voltage_under_load,
+                        max_voltage, min_voltage, max_pack_mass, enforce_mass_constraint,
+                        power_limit
+                    )
+                    if result:
+                        results.append(result)
+                        self.winfo_toplevel().after(0, lambda r=result: self._add_result_row(r))
 
             self.results = results
 
             # Find best (lowest lap time among sufficient configs)
             sufficient_results = [r for r in results if r.sufficient]
+
+            # Debug: print counts
+            print(f"[Pack Optimiser] Total results: {len(results)}, Valid: {len(sufficient_results)}")
+
             if sufficient_results:
-                self.best_result = min(sufficient_results, key=lambda r: r.lap_time)
+                # Among valid results, prefer: lowest lap time, then lowest mass, then highest power limit
+                self.best_result = min(sufficient_results,
+                    key=lambda r: (r.lap_time, r.config.pack_mass_kg, -(r.imposed_limit_kW or 0)))
+                self.best_is_valid = True
+                print(f"[Pack Optimiser] Selected VALID: {self.best_result.config.config_name} "
+                      f"@ {self.best_result.imposed_limit_kW}kW, sufficient={self.best_result.sufficient}")
             elif results:
-                # If none sufficient, find one with best lap time anyway
+                # If none sufficient, find one with best lap time anyway (for reference)
                 self.best_result = min(results, key=lambda r: r.lap_time)
+                self.best_is_valid = False
+                print(f"[Pack Optimiser] Selected INVALID (fallback): {self.best_result.config.config_name}, "
+                      f"sufficient={self.best_result.sufficient}")
+            else:
+                self.best_is_valid = False
+                print("[Pack Optimiser] No results at all!")
+
+            # Defensive check: verify selection
+            if self.best_result and sufficient_results and not self.best_result.sufficient:
+                print(f"[Pack Optimiser] BUG DETECTED! Selected invalid result when valid ones exist!")
+                # Force select a valid one
+                self.best_result = sufficient_results[0]
+                self.best_is_valid = True
 
             self.winfo_toplevel().after(0, self._show_results)
 
@@ -561,7 +738,8 @@ class BatteryOptimizerPanel(ttk.Frame):
                          min_voltage_under_load: float,
                          max_voltage: float, min_voltage: float,
                          max_pack_mass: float,
-                         enforce_mass_constraint: bool = True) -> Optional[OptimizationResult]:
+                         enforce_mass_constraint: bool = True,
+                         imposed_power_limit_kW: float = None) -> Optional[OptimizationResult]:
         """Simulate a single pack configuration with comprehensive validation.
 
         Args:
@@ -576,6 +754,7 @@ class BatteryOptimizerPanel(ttk.Frame):
             min_voltage: Minimum nominal voltage [V]
             max_pack_mass: Maximum allowed pack mass [kg]
             enforce_mass_constraint: If False, mass limit won't reject configurations
+            imposed_power_limit_kW: If set, caps the power draw at this value [kW]
         """
         try:
             from models.vehicle import (
@@ -609,9 +788,30 @@ class BatteryOptimizerPanel(ttk.Frame):
 
             pt = base_config['powertrain']
             if 'drivetrain' in pt:
+                # Get base motor power
+                base_motor_power_kW = pt['motor_power_kW']
+
+                # Calculate number of motors for this drivetrain
+                drivetrain = pt['drivetrain']
+                if drivetrain == 'AWD':
+                    n_motors = 4
+                elif drivetrain.startswith('1'):
+                    n_motors = 1
+                else:
+                    n_motors = 2
+
+                # Apply power limit if set - limit per-motor power
+                if imposed_power_limit_kW is not None and imposed_power_limit_kW > 0:
+                    # Total power limit divided by number of motors
+                    limited_motor_power_kW = imposed_power_limit_kW / n_motors
+                    # Use the minimum of base power and limited power
+                    effective_motor_power_kW = min(base_motor_power_kW, limited_motor_power_kW)
+                else:
+                    effective_motor_power_kW = base_motor_power_kW
+
                 powertrain = EVPowertrainParams(
-                    drivetrain=pt['drivetrain'],
-                    motor_power_kW=pt['motor_power_kW'],
+                    drivetrain=drivetrain,
+                    motor_power_kW=effective_motor_power_kW,
                     motor_torque_Nm=pt['motor_torque_Nm'],
                     motor_rpm_max=pt['motor_rpm_max'],
                     gear_ratio=pt['gear_ratio'],
@@ -619,8 +819,15 @@ class BatteryOptimizerPanel(ttk.Frame):
                     motor_efficiency=pt.get('motor_efficiency', 0.85),
                 )
             else:
+                # Legacy powertrain - apply power limit directly
+                base_power_W = pt['P_max_kW'] * 1000
+                if imposed_power_limit_kW is not None and imposed_power_limit_kW > 0:
+                    effective_power_W = min(base_power_W, imposed_power_limit_kW * 1000)
+                else:
+                    effective_power_W = base_power_W
+
                 powertrain = EVPowertrainMVP(
-                    P_max=pt['P_max_kW'] * 1000,
+                    P_max=effective_power_W,
                     Fx_max=pt['Fx_max_N'],
                 )
 
@@ -659,12 +866,22 @@ class BatteryOptimizerPanel(ttk.Frame):
             peak_demanded_power_kW = np.max(raw_power_kW)  # Raw demand before limiting
 
             # ============================================
+            # APPLY IMPOSED POWER LIMIT (if set)
+            # ============================================
+            # If user has imposed a power limit, cap the effective power demand
+            # This simulates software-limiting the power draw from the battery
+            effective_peak_power_kW = peak_demanded_power_kW
+            if imposed_power_limit_kW is not None and imposed_power_limit_kW > 0:
+                effective_peak_power_kW = min(peak_demanded_power_kW, imposed_power_limit_kW)
+
+            # ============================================
             # CURRENT CALCULATION (accounting for voltage loss)
             # ============================================
             # When voltage drops, MORE current is needed to deliver the same power
             # P = V_actual × I = (V_nom - I×R) × I
             # This is solved using the quadratic formula in calculate_current_at_power()
-            peak_current_A = pack_config.calculate_current_at_power(peak_demanded_power_kW)
+            # Use effective power (which may be limited by user-imposed limit)
+            peak_current_A = pack_config.calculate_current_at_power(effective_peak_power_kW)
 
             # ============================================
             # VOLTAGE LOSS CALCULATION (I×R drop)
@@ -717,6 +934,10 @@ class BatteryOptimizerPanel(ttk.Frame):
                     not exceeds_max_voltage and not below_min_voltage and
                     mass_ok)
 
+            # Determine if user-imposed power limit is actively capping the power
+            power_limit_active = (imposed_power_limit_kW is not None and
+                                  effective_peak_power_kW < peak_demanded_power_kW)
+
             return OptimizationResult(
                 config=pack_config,
                 lap_time=lap_time,
@@ -735,6 +956,9 @@ class BatteryOptimizerPanel(ttk.Frame):
                 exceeds_max_voltage=exceeds_max_voltage,
                 below_min_voltage=below_min_voltage,
                 exceeds_max_mass=exceeds_max_mass,
+                imposed_limit_kW=imposed_power_limit_kW,
+                effective_power_kW=effective_peak_power_kW if power_limit_active else None,
+                power_limit_active=power_limit_active,
             )
 
         except Exception as e:
@@ -773,9 +997,13 @@ class BatteryOptimizerPanel(ttk.Frame):
         else:
             status = "✗ LOW SoC"
 
+        # Format power limit column
+        p_lim_str = f"{result.imposed_limit_kW:.0f}" if result.imposed_limit_kW is not None else "—"
+
         self.results_tree.insert('', 'end', values=(
             config.config_name,
             config.total_cells,
+            p_lim_str,
             f"{config.voltage_nominal:.0f}",
             f"{result.voltage_under_load_V:.0f}",
             f"{result.peak_current_A:.0f}",
@@ -809,9 +1037,29 @@ class BatteryOptimizerPanel(ttk.Frame):
             # Efficiency (power delivered vs power from pack including I²R)
             efficiency = (r.peak_power_kW / (r.peak_power_kW + r.i2r_loss_kW)) * 100 if r.peak_power_kW > 0 else 100
 
-            lines = [
+            # Check if this is a valid result or a fallback
+            is_valid = getattr(self, 'best_is_valid', r.sufficient)
+
+            lines = []
+
+            # Show warning if no valid configs found
+            if not is_valid:
+                lines.extend([
+                    f"{'!' * 50}",
+                    f"  ⚠️  NO VALID CONFIGURATIONS FOUND  ⚠️",
+                    f"{'!' * 50}",
+                    f"",
+                    f"  All tested configurations failed at least one",
+                    f"  constraint. Showing best FAILING config below",
+                    f"  for reference only.",
+                    f"",
+                    f"  Check your constraints or expand search range.",
+                    f"",
+                ])
+
+            lines.extend([
                 f"{'═' * 50}",
-                f"  OPTIMAL BATTERY CONFIGURATION",
+                f"  {'BEST FAILING CONFIG (reference)' if not is_valid else 'OPTIMAL BATTERY CONFIGURATION'}",
                 f"{'═' * 50}",
                 f"",
                 f"  Configuration:    {c.config_name}",
@@ -841,6 +1089,16 @@ class BatteryOptimizerPanel(ttk.Frame):
                 f"  POWER & EFFICIENCY",
                 f"{'─' * 50}",
                 f"  Peak Power Demand: {r.peak_power_kW:.1f} kW",
+            ])
+
+            # Add power limit line if set
+            if r.imposed_limit_kW is not None:
+                if r.power_limit_active:
+                    lines.append(f"  Imposed Limit:     {r.imposed_limit_kW:.0f} kW  ⚡ ACTIVE")
+                else:
+                    lines.append(f"  Imposed Limit:     {r.imposed_limit_kW:.0f} kW  (not limiting)")
+
+            lines.extend([
                 f"  I²R Loss (peak):   {r.i2r_loss_kW:.2f} kW",
                 f"  Pack Efficiency:   {efficiency:.1f}%",
                 f"",
@@ -854,7 +1112,7 @@ class BatteryOptimizerPanel(ttk.Frame):
                 f"  Status:            {'VALID ✓' if r.sufficient else 'INVALID ✗'}",
                 f"",
                 f"{'═' * 50}",
-            ]
+            ])
             self.summary_text.insert('1.0', '\n'.join(lines))
         else:
             self.summary_text.insert('1.0', "No valid configurations found.")
