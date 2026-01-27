@@ -1,12 +1,12 @@
 vehicle:
-  mass_kg: 250
+  mass_kg: 239
   g: 9.81
   Crr: 0.015
   # Mass breakdown (for custom configuration)
   mass_chassis_aero_kg: 75        # 30% - Chassis & aero package
   mass_suspension_tyres_kg: 50    # 20% - Suspension & tyres
-  mass_powertrain_kg: 45          # 18% - Powertrain (motor, gearbox, etc.)
-  mass_battery_kg: 55             # 22% - Battery systems
+  mass_powertrain_kg: 44          # 2× EMRAX 208 (9.4kg each) + 25kg overhead = 43.8 kg
+  mass_battery_kg: 45             # 142S5P pack: 710 cells × 45g × 1.4 casing = 44.73 kg
   mass_electronics_kg: 25         # 10% - Electronics & other
 
 aero:
@@ -37,14 +37,15 @@ powertrain:
   #          AWD (4 motors, all wheels)
   drivetrain: 2RWD        # 2 motors, rear axle
   # Motor selection (reference from config/motors.yaml)
-  motor: default_motor    # Motor ID from motors.yaml database
+  motor: emrax_208        # Motor ID from motors.yaml database
   # Motor parameters (per motor) - auto-filled from motors.yaml if motor is specified
   # NOTE: FS rules limit total powertrain power to 80 kW
-  motor_power_kW: 40      # Power per motor [kW] (2 × 40 = 80 kW total for 2RWD)
-  motor_torque_Nm: 100    # Peak torque per motor [Nm]
-  motor_rpm_max: 6000     # Maximum motor RPM
-  motor_efficiency: 0.85  # Motor efficiency [0-1]
-  motor_weight_kg: 10.0   # Weight per motor [kg]
+  # EMRAX 208 specs: 86 kW peak, but limited to 40 kW/motor for FS compliance (2 × 40 = 80 kW)
+  motor_power_kW: 40      # Power per motor [kW] - limited for FS rules (EMRAX 208 capable of 86 kW)
+  motor_torque_Nm: 150    # Peak torque per motor [Nm] (EMRAX 208)
+  motor_rpm_max: 7000     # Maximum motor RPM (EMRAX 208)
+  motor_efficiency: 0.96  # Motor efficiency [0-1] (EMRAX 208)
+  motor_weight_kg: 9.4    # Weight per motor [kg] (EMRAX 208)
   # Powertrain overhead (inverters, wiring, cooling, mounts, differential for 1-motor)
   powertrain_overhead_kg: 25.0  # Additional powertrain mass [kg]
   # Transmission
@@ -52,18 +53,20 @@ powertrain:
   wheel_radius_m: 0.203   # Wheel radius [m] (16" wheel)
   # Weight calculation:
   # Total powertrain mass = (motor_weight_kg × n_motors) + powertrain_overhead_kg
-  # For 2RWD: (10.0 × 2) + 25.0 = 45 kg (matches mass_powertrain_kg default)
-  # For 1RWD: (10.0 × 1) + 30.0 = 40 kg (overhead includes differential ~5 kg)
+  # For 2RWD with EMRAX 208: (9.4 × 2) + 25.0 = 43.8 kg
+  # For 1RWD: (motor_weight × 1) + 30.0 kg (overhead includes differential ~5 kg)
 
 battery:
-  capacity_kWh: 6         # Typical FS EV battery (5-7 kWh)
+  # 142S5P configuration (710 cells total)
+  # Cell specs: 2600mAh, 3.6V nominal, 45g, 35A max per cell
+  capacity_kWh: 6.65      # (2.6Ah × 5P) × (142S × 3.6V) / 1000 = 6.65 kWh
   initial_soc: 1.0        # Start fully charged
   min_soc: 0.1            # 10% minimum (safety factor)
   max_discharge_kW: 80    # Match total motor power (FS 80 kW limit)
   eta_discharge: 0.95     # Battery discharge efficiency (safety factor)
   # Current limiting (FS 2025 rules)
-  nominal_voltage_V: 400  # Nominal pack voltage [V]
-  max_current_A: 500      # Maximum discharge current [A] (FS rules limit)
+  nominal_voltage_V: 511  # Nominal pack voltage [V] (142S × 3.6V = 511.2V)
+  max_current_A: 175      # Maximum discharge current [A] (5P × 35A cell limit = 175A)
   # Regenerative braking
   regen_enabled: false    # Disabled by default for backwards compatibility
   eta_regen: 0.85         # Regen efficiency (motor + battery charging losses)
