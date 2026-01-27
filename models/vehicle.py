@@ -2,12 +2,13 @@ from dataclasses import dataclass
 import numpy as np
 from typing import Union
 
+
 @dataclass(frozen=True)
 class AeroParams:
-    rho: float      # kg/m^3 - air density
-    Cd: float       # [-] - drag coefficient
-    Cl: float       # [-] - lift coefficient (downforce is positive)
-    A: float        # m^2 - frontal area
+    rho: float  # kg/m^3 - air density
+    Cd: float  # [-] - drag coefficient
+    Cl: float  # [-] - lift coefficient (downforce is positive)
+    A: float  # m^2 - frontal area
 
     @property
     def CD_A(self) -> float:
@@ -19,17 +20,19 @@ class AeroParams:
         """Lift coefficient × Area [m²]"""
         return self.Cl * self.A
 
+
 @dataclass(frozen=True)
 class TyreParamsMVP:
-    mu: float       # [-] constant friction coefficient
+    mu: float  # [-] constant friction coefficient
 
 
 @dataclass(frozen=True)
 class TyreParams:
     """Extended tyre parameters with cornering stiffness for bicycle model."""
-    mu: float                    # [-] friction coefficient
-    C_alpha_f: float = 45000.0   # [N/rad] front axle cornering stiffness
-    C_alpha_r: float = 50000.0   # [N/rad] rear axle cornering stiffness
+
+    mu: float  # [-] friction coefficient
+    C_alpha_f: float = 45000.0  # [N/rad] front axle cornering stiffness
+    C_alpha_r: float = 50000.0  # [N/rad] rear axle cornering stiffness
 
     @property
     def as_mvp(self) -> TyreParamsMVP:
@@ -40,17 +43,18 @@ class TyreParams:
 @dataclass(frozen=True)
 class VehicleGeometry:
     """Vehicle geometry parameters for bicycle model and weight transfer."""
-    wheelbase_m: float = 1.55       # [m] total wheelbase (L_f + L_r)
-    L_f_m: float = 0.75             # [m] CoG to front axle
-    L_r_m: float = 0.80             # [m] CoG to rear axle
-    track_front_m: float = 1.20     # [m] front track width
-    track_rear_m: float = 1.20      # [m] rear track width
-    h_cg_m: float = 0.28            # [m] CoG height above ground
+
+    wheelbase_m: float = 1.55  # [m] total wheelbase (L_f + L_r)
+    L_f_m: float = 0.75  # [m] CoG to front axle
+    L_r_m: float = 0.80  # [m] CoG to rear axle
+    track_front_m: float = 1.20  # [m] front track width
+    track_rear_m: float = 1.20  # [m] rear track width
+    h_cg_m: float = 0.28  # [m] CoG height above ground
 
     def __post_init__(self):
         # Validate wheelbase consistency
         if abs(self.wheelbase_m - (self.L_f_m + self.L_r_m)) > 0.01:
-            object.__setattr__(self, 'wheelbase_m', self.L_f_m + self.L_r_m)
+            object.__setattr__(self, "wheelbase_m", self.L_f_m + self.L_r_m)
 
     @property
     def L(self) -> float:
@@ -71,16 +75,21 @@ class VehicleGeometry:
 @dataclass(frozen=True)
 class TorqueVectoringParams:
     """Torque vectoring system parameters."""
-    enabled: bool = False           # Enable torque vectoring
-    effectiveness: float = 1.0      # TV system effectiveness [0-1]
-    max_torque_transfer: float = 0.5  # Max transfer ratio (0.5 = can shift 50% to one side)
-    strategy: str = 'load_proportional'  # 'load_proportional', 'fixed_bias', 'yaw_rate'
+
+    enabled: bool = False  # Enable torque vectoring
+    effectiveness: float = 1.0  # TV system effectiveness [0-1]
+    max_torque_transfer: float = (
+        0.5  # Max transfer ratio (0.5 = can shift 50% to one side)
+    )
+    strategy: str = "load_proportional"  # 'load_proportional', 'fixed_bias', 'yaw_rate'
+
 
 @dataclass(frozen=True)
 class EVPowertrainMVP:
     """Legacy powertrain model - kept for backward compatibility."""
-    P_max: float    # W
-    Fx_max: float   # N  (low-speed tractive force cap)
+
+    P_max: float  # W
+    Fx_max: float  # N  (low-speed tractive force cap)
 
 
 @dataclass(frozen=True)
@@ -99,27 +108,28 @@ class EVPowertrainParams:
         total_powertrain_mass = (motor_weight_kg × n_motors) + powertrain_overhead_kg
         Note: For single motor configs, powertrain_overhead should include differential mass
     """
-    drivetrain: str           # '1FWD', '1RWD', '2FWD', '2RWD', 'FWD', 'RWD', or 'AWD'
-    motor_power_kW: float     # Power per motor [kW]
-    motor_torque_Nm: float    # Peak torque per motor [Nm]
-    motor_rpm_max: float      # Maximum motor RPM
-    gear_ratio: float         # Final drive gear ratio (motor:wheel)
-    wheel_radius_m: float     # Wheel radius [m]
-    motor_efficiency: float = 0.85  # Motor efficiency [0-1]
+
+    drivetrain: str  # '1FWD', '1RWD', '2FWD', '2RWD', 'FWD', 'RWD', or 'AWD'
+    motor_power_kW: float  # Power per motor [kW]
+    motor_torque_Nm: float  # Peak torque per motor [Nm]
+    motor_rpm_max: float  # Maximum motor RPM
+    gear_ratio: float  # Final drive gear ratio (motor:wheel)
+    wheel_radius_m: float  # Wheel radius [m]
+    motor_efficiency: float = 0.96  # Motor efficiency [0-1] (EMRAX 208 default)
     # Motor identification and weight
-    motor_name: str = "Default Motor"  # Motor name/model
-    motor_weight_kg: float = 10.0      # Weight per motor [kg]
-    motor_constant_Nm_A: float = 0.5   # Torque constant Km [Nm/A]
-    peak_current_A: float = 200.0      # Peak motor current [A]
+    motor_name: str = "EMRAX 208"  # Motor name/model
+    motor_weight_kg: float = 9.4  # Weight per motor [kg] (EMRAX 208)
+    motor_constant_Nm_A: float = 0.62  # Torque constant Km [Nm/A] (EMRAX 208)
+    peak_current_A: float = 240.0  # Peak motor current [A] (EMRAX 208)
     # Powertrain overhead (inverters, wiring, cooling, mounts, differential for 1-motor)
     powertrain_overhead_kg: float = 25.0  # Additional powertrain mass [kg]
 
     @property
     def n_motors(self) -> int:
         """Number of motors based on drivetrain configuration."""
-        if self.drivetrain == 'AWD':
+        if self.drivetrain == "AWD":
             return 4
-        elif self.drivetrain.startswith('1'):
+        elif self.drivetrain.startswith("1"):
             return 1
         else:
             # '2FWD', '2RWD', 'FWD', 'RWD' all have 2 motors
@@ -128,12 +138,12 @@ class EVPowertrainParams:
     @property
     def driven_axle(self) -> str:
         """Which axle is driven: 'front', 'rear', or 'both'."""
-        if self.drivetrain in ('AWD',):
-            return 'both'
-        elif self.drivetrain in ('1FWD', '2FWD', 'FWD'):
-            return 'front'
+        if self.drivetrain in ("AWD",):
+            return "both"
+        elif self.drivetrain in ("1FWD", "2FWD", "FWD"):
+            return "front"
         else:  # '1RWD', '2RWD', 'RWD'
-            return 'rear'
+            return "rear"
 
     @property
     def has_torque_vectoring_capability(self) -> bool:
@@ -156,7 +166,9 @@ class EVPowertrainParams:
         Calculated from motor torque, number of motors, gear ratio, and wheel radius.
         Fx = (torque × n_motors × gear_ratio) / wheel_radius
         """
-        return (self.motor_torque_Nm * self.n_motors * self.gear_ratio) / self.wheel_radius_m
+        return (
+            self.motor_torque_Nm * self.n_motors * self.gear_ratio
+        ) / self.wheel_radius_m
 
     @property
     def v_max_rpm(self) -> float:
@@ -190,30 +202,34 @@ class EVPowertrainParams:
 @dataclass(frozen=True)
 class BatteryParams:
     """Battery parameters for energy tracking with optional regenerative braking."""
-    capacity_kWh: float             # Total battery capacity [kWh]
-    initial_soc: float = 1.0        # Initial state of charge [0-1]
-    min_soc: float = 0.1            # Minimum allowed SoC [0-1] (safety margin)
+
+    capacity_kWh: float  # Total battery capacity [kWh]
+    initial_soc: float = 1.0  # Initial state of charge [0-1]
+    min_soc: float = 0.1  # Minimum allowed SoC [0-1] (safety margin)
     max_discharge_kW: float = 80.0  # Maximum discharge power [kW]
-    eta_discharge: float = 0.95     # Battery discharge efficiency
-    # Current limiting (FS 2025 rules: 500A max)
-    nominal_voltage_V: float = 400.0  # Nominal pack voltage [V]
-    max_current_A: float = 500.0      # Maximum discharge current [A] (FS rules limit)
+    eta_discharge: float = 0.95  # Battery discharge efficiency
+    # Current limiting (142S5P pack default)
+    nominal_voltage_V: float = 511.0  # Nominal pack voltage [V] (142S × 3.6V)
+    max_current_A: float = 175.0  # Maximum discharge current [A] (5P × 35A cell limit)
     # Regenerative braking parameters
-    regen_enabled: bool = False     # Enable regenerative braking
-    eta_regen: float = 0.85         # Regen efficiency (motor + battery charging)
-    max_regen_kW: float = 50.0      # Maximum regen charging power [kW]
-    regen_capture_percent: float = 100.0  # % of braking that uses regen vs friction [0-100]
+    regen_enabled: bool = False  # Enable regenerative braking
+    eta_regen: float = 0.85  # Regen efficiency (motor + battery charging)
+    max_regen_kW: float = 50.0  # Maximum regen charging power [kW]
+    regen_capture_percent: float = (
+        100.0  # % of braking that uses regen vs friction [0-100]
+    )
 
     @property
     def max_power_from_current_kW(self) -> float:
         """Maximum power limited by current: P = V × I [kW]"""
         return (self.nominal_voltage_V * self.max_current_A) / 1000.0
 
+
 @dataclass(frozen=True)
 class VehicleParams:
-    m: float        # kg
-    g: float        # m/s^2
-    Crr: float      # [-]
+    m: float  # kg
+    g: float  # m/s^2
+    Crr: float  # [-]
     aero: AeroParams
     tyre: Union[TyreParamsMVP, TyreParams]  # Either legacy or extended tyre model
     powertrain: Union[EVPowertrainMVP, EVPowertrainParams]  # Either legacy or extended
@@ -234,10 +250,12 @@ class VehicleParams:
     @property
     def has_torque_vectoring(self) -> bool:
         """Check if torque vectoring is enabled."""
-        return (self.torque_vectoring is not None and
-                self.torque_vectoring.enabled and
-                self.has_extended_powertrain and
-                self.powertrain.drivetrain in ('RWD', 'AWD'))
+        return (
+            self.torque_vectoring is not None
+            and self.torque_vectoring.enabled
+            and self.has_extended_powertrain
+            and self.powertrain.drivetrain in ("RWD", "AWD")
+        )
 
     @property
     def mu(self) -> float:
