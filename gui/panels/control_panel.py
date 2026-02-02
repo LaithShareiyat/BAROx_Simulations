@@ -133,7 +133,8 @@ class ControlPanel(ttk.Frame):
                 "g": 9.81,
                 "Crr": 0.015,
                 # Mass breakdown
-                "mass_chassis_aero_kg": 75,
+                "mass_chassis_kg": 55,
+                "mass_aero_kg": 20,
                 "mass_suspension_tyres_kg": 50,
                 "mass_powertrain_kg": 44,  # 2× EMRAX 208 (9.4kg) + 25kg overhead
                 "mass_battery_kg": 45,  # 142S5P pack
@@ -224,6 +225,20 @@ class ControlPanel(ttk.Frame):
         # Vehicle parameters (with mass breakdown for custom mode)
         self._create_vehicle_section()
 
+        # Geometry parameters
+        self._create_param_section(
+            "GEOMETRY",
+            "geometry",
+            [
+                ("wheelbase_m", "Wheelbase", "m"),
+                ("L_f_m", "CoG to Front Axle", "m"),
+                ("L_r_m", "CoG to Rear Axle", "m"),
+                ("track_front_m", "Front Track", "m"),
+                ("track_rear_m", "Rear Track", "m"),
+                ("h_cg_m", "CoG Height", "m"),
+            ],
+        )
+
         # Aero parameters
         self._create_param_section(
             "AERODYNAMICS",
@@ -292,7 +307,8 @@ class ControlPanel(ttk.Frame):
         self.mass_breakdown_entries = {}
 
         mass_components = [
-            ("mass_chassis_aero_kg", "Chassis & Aero", 75),
+            ("mass_chassis_kg", "Chassis", 55),
+            ("mass_aero_kg", "Aero Package", 20),
             ("mass_suspension_tyres_kg", "Suspension & Tyres", 50),
             ("mass_powertrain_kg", "Powertrain", 45),
             ("mass_battery_kg", "Battery Systems", 55),
@@ -1393,10 +1409,13 @@ class ControlPanel(ttk.Frame):
         # If mass breakdown values aren't in config, calculate from total mass
         if "vehicle" in config:
             total_mass = config["vehicle"].get("mass_kg", 250)
-            if "mass_chassis_aero_kg" not in config["vehicle"]:
+            if "mass_chassis_kg" not in config["vehicle"]:
                 # Apply default ratios
-                self.mass_breakdown_vars["mass_chassis_aero_kg"].set(
-                    str(round(total_mass * 0.30))
+                self.mass_breakdown_vars["mass_chassis_kg"].set(
+                    str(round(total_mass * 0.23))
+                )
+                self.mass_breakdown_vars["mass_aero_kg"].set(
+                    str(round(total_mass * 0.08))
                 )
                 self.mass_breakdown_vars["mass_suspension_tyres_kg"].set(
                     str(round(total_mass * 0.20))

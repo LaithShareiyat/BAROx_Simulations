@@ -202,9 +202,10 @@ def create_vehicle_from_config(config: dict) -> VehicleParams:
     # Calculate total vehicle mass
     # If mass breakdown is provided, use calculated powertrain mass from motors
     vehicle_config = config["vehicle"]
-    if "mass_chassis_aero_kg" in vehicle_config:
+    if "mass_chassis_kg" in vehicle_config:
         # Mass breakdown mode: use calculated powertrain mass
-        mass_chassis_aero = vehicle_config.get("mass_chassis_aero_kg", 75)
+        mass_chassis = vehicle_config.get("mass_chassis_kg", 55)
+        mass_aero = vehicle_config.get("mass_aero_kg", 20)
         mass_suspension_tyres = vehicle_config.get("mass_suspension_tyres_kg", 50)
         mass_battery = vehicle_config.get("mass_battery_kg", 45)
         mass_electronics = vehicle_config.get("mass_electronics_kg", 25)
@@ -216,7 +217,8 @@ def create_vehicle_from_config(config: dict) -> VehicleParams:
             mass_powertrain = vehicle_config.get("mass_powertrain_kg", 44)
 
         total_mass = (
-            mass_chassis_aero
+            mass_chassis
+            + mass_aero
             + mass_suspension_tyres
             + mass_powertrain
             + mass_battery
