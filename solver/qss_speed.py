@@ -15,7 +15,7 @@ import numpy as np
 from models.track import Track
 from models.vehicle import VehicleParams
 from physics.aero import drag, downforce
-from physics.tyre import a_max, ax_available
+from physics.tyre import a_max, ax_available, ax_traction_axle_aware, ax_braking_axle_aware
 from physics.powertrain import max_tractive_force, max_tractive_force_extended
 from physics.resistive import rolling_resistance
 from physics.bicycle_model import solve_qss_bicycle, calculate_max_lateral_accel
@@ -208,15 +208,24 @@ def solve_qss(track: Track, vehicle: VehicleParams,
         Frr = rolling_resistance(vehicle.Crr, m, g)
 
         # Maximum grip-limited acceleration
-        amax = a_max(mu, g, m, Fdown)
         ay = v_i**2 * abs(track.kappa[i])
 
-        # Apply torque vectoring traction benefit during corner exit
-        if has_tv and ay > 0.1:
-            tv_traction_mult = calculate_tv_traction_benefit(vehicle, ay, a_x=1.0)
-            amax = amax * tv_traction_mult
-
-        ax_grip = ax_available(amax, ay)
+        if use_bicycle and vehicle.has_extended_powertrain:
+            # Axle-aware traction with weight transfer and drivetrain
+            M_z_tv = 0.0
+            if has_tv and ay > 0.1:
+                tv_output = calculate_tv_yaw_moment(vehicle, ay, a_x=1.0)
+                M_z_tv = tv_output.M_z
+            ax_grip = ax_traction_axle_aware(
+                mu, vehicle, v_i, abs(track.kappa[i]), Fdown, M_z_tv
+            )
+        else:
+            # Fallback: original point-mass friction circle
+            amax = a_max(mu, g, m, Fdown)
+            if has_tv and ay > 0.1:
+                tv_traction_mult = calculate_tv_traction_benefit(vehicle, ay, a_x=1.0)
+                amax = amax * tv_traction_mult
+            ax_grip = ax_available(amax, ay)
 
         # Maximum power-limited acceleration (uses extended function for RPM limit)
         Fx_motor = max_tractive_force_extended(vehicle.powertrain, v_i)
@@ -269,9 +278,14 @@ def solve_qss(track: Track, vehicle: VehicleParams,
         Frr = rolling_resistance(vehicle.Crr, m, g)
         
         # Maximum grip-limited deceleration
-        amax = a_max(mu, g, m, Fdown)
         ay = v_i**2 * abs(track.kappa[i + 1])
-        ax_grip = ax_available(amax, ay)
+        if use_bicycle and vehicle.has_extended_powertrain:
+            ax_grip = ax_braking_axle_aware(
+                mu, vehicle, v_i, abs(track.kappa[i + 1]), Fdown
+            )
+        else:
+            amax = a_max(mu, g, m, Fdown)
+            ax_grip = ax_available(amax, ay)
         
         # Deceleration (braking adds to drag/rr)
         ax_brake = ax_grip + (Fdrag + Frr) / m

@@ -3,7 +3,8 @@ vehicle:
   g: 9.81
   Crr: 0.015
   # Mass breakdown (for custom configuration)
-  mass_chassis_aero_kg: 75        # 30% - Chassis & aero package
+  mass_chassis_kg: 55              # Chassis (frame, body, seat, harness)
+  mass_aero_kg: 20                # Aero package (wings, endplates, undertray)
   mass_suspension_tyres_kg: 50    # 20% - Suspension & tyres
   mass_powertrain_kg: 44          # 2× EMRAX 208 (9.4kg each) + 25kg overhead = 43.8 kg
   mass_battery_kg: 45             # 142S5P pack: 710 cells × 45g × 1.4 casing = 44.73 kg
