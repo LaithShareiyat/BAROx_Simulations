@@ -254,7 +254,7 @@ class VehicleParams:
             self.torque_vectoring is not None
             and self.torque_vectoring.enabled
             and self.has_extended_powertrain
-            and self.powertrain.drivetrain in ("RWD", "AWD")
+            and self.powertrain.has_torque_vectoring_capability
         )
 
     @property
