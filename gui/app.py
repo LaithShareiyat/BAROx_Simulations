@@ -36,83 +36,101 @@ class BAROxGUI:
         self.running = False
         self.results = {}
 
+    # Current theme state
+    _dark_mode = False
+
     def _configure_styles(self):
         """Configure ttk styles for the application."""
         style = ttk.Style()
-
-        # Try to use a modern theme
-        available_themes = style.theme_names()
-        if "clam" in available_themes:
+        # Use clam as base — lightweight and cross-platform
+        if "clam" in style.theme_names():
             style.theme_use("clam")
-        elif "alt" in available_themes:
-            style.theme_use("alt")
+        self._apply_theme(style)
 
-        # Custom styles
-        style.configure("TLabelFrame", padding=5)
-        style.configure("TLabelFrame.Label", font=("Segoe UI", 9, "bold"))
+    def _apply_theme(self, style: ttk.Style = None):
+        """Apply dark or light colour scheme on top of the clam theme."""
+        if style is None:
+            style = ttk.Style()
+        is_dark = self._dark_mode
 
-        # Accent button style
+        if is_dark:
+            bg = "#2b2b2b"
+            fg = "#e0e0e0"
+            field_bg = "#3c3f41"
+            select_bg = "#4a6984"
+            border = "#555555"
+        else:
+            bg = "#dcdad5"
+            fg = "#000000"
+            field_bg = "#ffffff"
+            select_bg = "#4a6984"
+            border = "#9e9a91"
+
+        # Override clam base colours
+        style.configure(".", background=bg, foreground=fg,
+                        fieldbackground=field_bg, bordercolor=border,
+                        selectbackground=select_bg, selectforeground="#ffffff",
+                        insertcolor=fg)
+        style.configure("TFrame", background=bg)
+        style.configure("TLabel", background=bg, foreground=fg)
+        style.configure("TLabelFrame", background=bg, padding=5)
+        style.configure("TLabelFrame.Label", background=bg, foreground=fg,
+                        font=("Segoe UI", 9, "bold"))
+        style.configure("TNotebook", background=bg)
+        style.configure("TNotebook.Tab", background=bg, foreground=fg, padding=[8, 4])
+        style.map("TNotebook.Tab",
+                  background=[("selected", field_bg), ("!selected", bg)],
+                  foreground=[("selected", fg), ("!selected", fg)])
+        style.configure("TButton", background=bg, foreground=fg)
+        style.map("TButton", background=[("active", select_bg)])
         style.configure("Accent.TButton", font=("Segoe UI", 10, "bold"), padding=10)
+        style.configure("TEntry", fieldbackground=field_bg, foreground=fg)
+        style.configure("TCombobox", fieldbackground=field_bg, foreground=fg)
+        style.map("TCombobox", fieldbackground=[("readonly", field_bg)])
+        style.configure("TCheckbutton", background=bg, foreground=fg)
+        style.configure("TRadiobutton", background=bg, foreground=fg)
+        style.configure("TPanedwindow", background=bg)
+        style.configure("Horizontal.TScrollbar", background=bg, troughcolor=bg)
+        style.configure("Vertical.TScrollbar", background=bg, troughcolor=bg)
 
-        # Invalid entry style
+        # Invalid entry
         style.configure("Invalid.TEntry", fieldbackground="#ffcccc")
 
-        # --- Results-card styles ---
-        style.configure(
-            "Headline.TLabel",
-            font=("Segoe UI", 28, "bold"),
-            foreground="#1a1a2e",
-        )
-        style.configure(
-            "HeadlineUnit.TLabel",
-            font=("Segoe UI", 14),
-            foreground="#555555",
-        )
-        style.configure(
-            "DataLabel.TLabel",
-            font=("Segoe UI", 13),
-            foreground="#444444",
-        )
-        style.configure(
-            "DataValue.TLabel",
-            font=("Segoe UI", 13, "bold"),
-            foreground="#1a1a2e",
-        )
-        style.configure(
-            "Pass.TLabel",
-            font=("Segoe UI", 16, "bold"),
-            foreground="#2e7d32",
-        )
-        style.configure(
-            "Fail.TLabel",
-            font=("Segoe UI", 16, "bold"),
-            foreground="#c62828",
-        )
-        style.configure(
-            "Warning.TLabel",
-            font=("Segoe UI", 12),
-            foreground="#e65100",
-        )
-        style.configure(
-            "TableHeader.TLabel",
-            font=("Segoe UI", 12, "bold"),
-            foreground="#333333",
-        )
-        style.configure(
-            "TableCell.TLabel",
-            font=("Segoe UI", 12),
-            foreground="#222222",
-        )
-        style.configure(
-            "CardTitle.TLabel",
-            font=("Segoe UI", 14, "bold"),
-            foreground="#1a1a2e",
-        )
-        style.configure(
-            "SectionTitle.TLabel",
-            font=("Segoe UI", 12, "bold"),
-            foreground="#37474f",
-        )
+        # Unit label style (for control_panel kg, kW, etc.)
+        unit_fg = "#888888" if is_dark else "gray"
+        style.configure("Unit.TLabel", background=bg, foreground=unit_fg)
+
+        # Theme-aware text colours for results cards
+        text_primary = "#e0e0e0" if is_dark else "#1a1a2e"
+        text_secondary = "#aaaaaa" if is_dark else "#555555"
+        text_data = "#cccccc" if is_dark else "#444444"
+        text_header = "#dddddd" if is_dark else "#333333"
+        text_cell = "#cccccc" if is_dark else "#222222"
+        text_card_title = "#e0e0e0" if is_dark else "#1a1a2e"
+        text_section = "#b0bec5" if is_dark else "#37474f"
+
+        style.configure("Headline.TLabel", font=("Segoe UI", 28, "bold"),
+                        background=bg, foreground=text_primary)
+        style.configure("HeadlineUnit.TLabel", font=("Segoe UI", 14),
+                        background=bg, foreground=text_secondary)
+        style.configure("DataLabel.TLabel", font=("Segoe UI", 13),
+                        background=bg, foreground=text_data)
+        style.configure("DataValue.TLabel", font=("Segoe UI", 13, "bold"),
+                        background=bg, foreground=text_primary)
+        style.configure("Pass.TLabel", font=("Segoe UI", 16, "bold"),
+                        background=bg, foreground="#4caf50" if is_dark else "#2e7d32")
+        style.configure("Fail.TLabel", font=("Segoe UI", 16, "bold"),
+                        background=bg, foreground="#ef5350" if is_dark else "#c62828")
+        style.configure("Warning.TLabel", font=("Segoe UI", 12),
+                        background=bg, foreground="#ffb74d" if is_dark else "#e65100")
+        style.configure("TableHeader.TLabel", font=("Segoe UI", 12, "bold"),
+                        background=bg, foreground=text_header)
+        style.configure("TableCell.TLabel", font=("Segoe UI", 12),
+                        background=bg, foreground=text_cell)
+        style.configure("CardTitle.TLabel", font=("Segoe UI", 14, "bold"),
+                        background=bg, foreground=text_card_title)
+        style.configure("SectionTitle.TLabel", font=("Segoe UI", 12, "bold"),
+                        background=bg, foreground=text_section)
 
     def _create_logo_banner(self):
         """Create the logo banner at the top of the window."""
@@ -160,6 +178,18 @@ class BAROxGUI:
                 )
                 title_label.pack(side="right", padx=20, pady=5)
 
+                # Dark/light mode toggle
+                self.theme_toggle_btn = tk.Button(
+                    self.banner_frame,
+                    text="\u2600",  # Sun symbol (currently light mode)
+                    font=("Segoe UI", 16),
+                    fg="#f0c040", bg="#12243e",
+                    bd=0, highlightthickness=0,
+                    activebackground="#12243e", activeforeground="#d4a017",
+                    command=self._toggle_theme,
+                )
+                self.theme_toggle_btn.pack(side="right", padx=(0, 5))
+
             except Exception as e:
                 # Fallback to text-only banner if image fails
                 self._create_text_banner()
@@ -176,6 +206,45 @@ class BAROxGUI:
             bg="#12243e",
         )
         title_label.pack(expand=True)
+
+        # Dark/light mode toggle
+        self.theme_toggle_btn = tk.Button(
+            self.banner_frame,
+            text="\u2600",
+            font=("Segoe UI", 16),
+            fg="#f0c040", bg="#12243e",
+            bd=0, highlightthickness=0,
+            activebackground="#12243e", activeforeground="#d4a017",
+            command=self._toggle_theme,
+        )
+        self.theme_toggle_btn.pack(side="right", padx=(0, 10))
+
+    def _toggle_theme(self):
+        """Toggle between dark and light themes."""
+        self._dark_mode = not self._dark_mode
+        is_dark = self._dark_mode
+
+        # Update toggle button symbol and colour
+        if is_dark:
+            self.theme_toggle_btn.config(text="\u263e", fg="#c0c0e0")  # Silver moon
+        else:
+            self.theme_toggle_btn.config(text="\u2600", fg="#f0c040")  # Gold sun
+
+        # Re-apply theme colours
+        self._apply_theme()
+
+        # Update results panel theme-dependent colours
+        if hasattr(self, "results_panel"):
+            self.results_panel.update_theme_colours()
+
+        # Re-render plots if results exist
+        if self.results:
+            event_type = (
+                "both" if "autocross" in self.results and "skidpad" in self.results
+                else "autocross" if "autocross" in self.results
+                else "skidpad"
+            )
+            self._update_display(self.results, event_type)
 
     def _create_layout(self):
         """Create the main application layout."""
@@ -670,6 +739,7 @@ class BAROxGUI:
 
         # Update independent plot tabs
         self.results_panel.update_speed_distance_plot(autocross_data, skidpad_data)
+        self.results_panel.update_accel_distance_plot(autocross_data, skidpad_data)
         self.results_panel.update_rpm_distance_plot(autocross_data, skidpad_data)
         self.results_panel.update_power_demand_plot(autocross_data, skidpad_data)
 
@@ -750,6 +820,12 @@ class BAROxGUI:
                 (self.results_panel.gear_ratio_sweep_canvas, "gear_ratio_sweep.png"),
                 (self.results_panel.battery_canvas, "battery_analysis.png"),
             ]
+
+            # Add config comparison chart if it exists
+            if hasattr(self.results_panel, "config_comparison"):
+                plot_configs.append(
+                    (self.results_panel.config_comparison.chart_canvas, "config_comparison.png"),
+                )
 
             for canvas, filename in plot_configs:
                 try:

@@ -65,14 +65,70 @@ class ResultsPanel(ttk.Frame):
         self._create_layout_tab()
         self._create_speed_track_tab()
         self._create_speed_distance_tab()
+        self._create_accel_distance_tab()
         self._create_rpm_distance_tab()
         self._create_power_demand_tab()
         self._create_gear_ratio_sweep_tab()
         self._create_battery_tab()
         self._create_battery_optimiser_tab()
+        self._create_config_comparison_tab()
 
         # Status bar at bottom
         self._create_status_bar()
+
+    # ------------------------------------------------------------------
+    # Theme helpers
+    # ------------------------------------------------------------------
+
+    def _get_plot_colours(self) -> dict:
+        """Get matplotlib colours matching the current ttk theme."""
+        # Detect dark mode from ttk background colour (no sv_ttk dependency)
+        bg_hex = ttk.Style().lookup("TFrame", "background") or "#dcdad5"
+        # Dark themes have low luminance backgrounds
+        try:
+            r = int(bg_hex[1:3], 16)
+            g = int(bg_hex[3:5], 16)
+            b = int(bg_hex[5:7], 16)
+            is_dark = (r + g + b) / 3 < 128
+        except (ValueError, IndexError):
+            is_dark = False
+
+        if is_dark:
+            return {
+                "bg": "#1c1c1c",
+                "text": "#e0e0e0",
+                "grid_alpha": 0.2,
+                "edge": "white",
+            }
+        return {
+            "bg": "white",
+            "text": "black",
+            "grid_alpha": 0.3,
+            "edge": "black",
+        }
+
+    def _style_axes(self, ax, colours: dict = None):
+        """Apply theme colours to a matplotlib axes."""
+        if colours is None:
+            colours = self._get_plot_colours()
+        ax.set_facecolor(colours["bg"])
+        ax.tick_params(colors=colours["text"])
+        for spine in ax.spines.values():
+            spine.set_color(colours["text"])
+        ax.xaxis.label.set_color(colours["text"])
+        ax.yaxis.label.set_color(colours["text"])
+        ax.title.set_color(colours["text"])
+
+    def _style_figure(self, fig, colours: dict = None):
+        """Apply theme background to a matplotlib figure."""
+        if colours is None:
+            colours = self._get_plot_colours()
+        fig.patch.set_facecolor(colours["bg"])
+
+    def update_theme_colours(self):
+        """Update colours that don't automatically follow the ttk theme."""
+        bg = ttk.Style().lookup("TFrame", "background") or "white"
+        self._results_canvas.configure(bg=bg)
 
     def _create_results_tab(self):
         """Create the card-based results tab with scrollable canvas."""
@@ -169,6 +225,15 @@ class ResultsPanel(ttk.Frame):
         self.speed_distance_canvas = PlotCanvas(frame, figsize=(10, 6))
         self.speed_distance_canvas.pack(fill="both", expand=True)
 
+    def _create_accel_distance_tab(self):
+        """Create the acceleration vs distance tab."""
+        from ..widgets.plot_canvas import PlotCanvas
+
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Accel vs Distance")
+        self.accel_distance_canvas = PlotCanvas(frame, figsize=(10, 6))
+        self.accel_distance_canvas.pack(fill="both", expand=True)
+
     def _create_rpm_distance_tab(self):
         """Create the motor RPM vs distance tab."""
         from ..widgets.plot_canvas import PlotCanvas
@@ -219,6 +284,19 @@ class ResultsPanel(ttk.Frame):
             get_base_config=self.get_config_callback or self._get_default_config,
         )
         self.battery_optimiser.pack(fill="both", expand=True)
+
+    def _create_config_comparison_tab(self):
+        """Create the config comparison tab."""
+        self.comparison_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.comparison_frame, text="Config Comparison")
+
+        from .config_comparison_panel import ConfigComparisonPanel
+
+        self.config_comparison = ConfigComparisonPanel(
+            self.comparison_frame,
+            get_base_config=self.get_config_callback or self._get_default_config,
+        )
+        self.config_comparison.pack(fill="both", expand=True)
 
     def _get_default_config(self) -> dict:
         """Fallback default config if no callback provided."""
@@ -640,6 +718,8 @@ class ResultsPanel(ttk.Frame):
         """Update the track layout plot (geometry only, no speed colouring)."""
         fig = self.layout_canvas.get_figure()
         fig.clear()
+        colours = self._get_plot_colours()
+        self._style_figure(fig, colours)
 
         # Determine layout based on available data
         has_autocross = autocross_data is not None
@@ -656,6 +736,12 @@ class ResultsPanel(ttk.Frame):
             ax2 = fig.add_subplot(111)
         else:
             return
+
+        # Apply theme to axes
+        if ax1 is not None:
+            self._style_axes(ax1, colours)
+        if ax2 is not None:
+            self._style_axes(ax2, colours)
 
         # Plot autocross layout
         if has_autocross and ax1 is not None:
@@ -697,7 +783,7 @@ class ResultsPanel(ttk.Frame):
                     s=80,
                     label="Slalom cones",
                     zorder=15,
-                    edgecolors="black",
+                    edgecolors=colours["edge"],
                     linewidths=0.5,
                 )
 
@@ -705,8 +791,8 @@ class ResultsPanel(ttk.Frame):
             ax1.set_xlabel("x [m]")
             ax1.set_ylabel("y [m]")
             ax1.set_title("Autocross Track Layout")
-            ax1.legend(loc="lower right", fontsize=8)
-            ax1.grid(True, alpha=0.3)
+            ax1.legend(loc="lower right", fontsize=8, labelcolor=colours["text"])
+            ax1.grid(True, alpha=colours["grid_alpha"])
 
         # Plot skidpad layout (using same approach as plot_skidpad_full)
         if has_skidpad and ax2 is not None:
@@ -829,8 +915,8 @@ class ResultsPanel(ttk.Frame):
             ax2.set_xlabel("x [m]")
             ax2.set_ylabel("y [m]")
             ax2.set_title("Skidpad Track Layout")
-            ax2.legend(loc="upper right", fontsize=8)
-            ax2.grid(True, alpha=0.3)
+            ax2.legend(loc="upper right", fontsize=8, labelcolor=colours["text"])
+            ax2.grid(True, alpha=colours["grid_alpha"])
 
         fig.tight_layout()
         self.layout_canvas.draw()
@@ -841,6 +927,8 @@ class ResultsPanel(ttk.Frame):
         """Update the speed track map with velocity colouring for both events."""
         fig = self.track_canvas.get_figure()
         fig.clear()
+        colours = self._get_plot_colours()
+        self._style_figure(fig, colours)
 
         # Determine layout based on available data
         has_autocross = autocross_data is not None
@@ -857,6 +945,12 @@ class ResultsPanel(ttk.Frame):
             ax2 = fig.add_subplot(111)
         else:
             return
+
+        # Apply theme to axes
+        if ax1 is not None:
+            self._style_axes(ax1, colours)
+        if ax2 is not None:
+            self._style_axes(ax2, colours)
 
         # Plot autocross with speed colouring
         if has_autocross and ax1 is not None:
@@ -899,7 +993,7 @@ class ResultsPanel(ttk.Frame):
                     s=60,
                     label="Slaloms",
                     zorder=15,
-                    edgecolors="black",
+                    edgecolors=colours["edge"],
                     linewidths=0.5,
                 )
 
@@ -907,8 +1001,8 @@ class ResultsPanel(ttk.Frame):
             ax1.set_xlabel("x [m]")
             ax1.set_ylabel("y [m]")
             ax1.set_title("Autocross - Speed Map")
-            ax1.legend(loc="lower right", fontsize=8)
-            ax1.grid(True, alpha=0.3)
+            ax1.legend(loc="lower right", fontsize=8, labelcolor=colours["text"])
+            ax1.grid(True, alpha=colours["grid_alpha"])
 
         # Plot skidpad with speed colouring
         if has_skidpad and ax2 is not None:
@@ -965,8 +1059,8 @@ class ResultsPanel(ttk.Frame):
                 ax2.set_title(f"Skidpad - Steady State: {v_mean:.2f} m/s")
             else:
                 ax2.set_title("Skidpad - Speed Map")
-            ax2.legend(loc="upper right", fontsize=8)
-            ax2.grid(True, alpha=0.3)
+            ax2.legend(loc="upper right", fontsize=8, labelcolor=colours["text"])
+            ax2.grid(True, alpha=colours["grid_alpha"])
 
         fig.tight_layout()
         self.track_canvas.draw()
@@ -981,7 +1075,10 @@ class ResultsPanel(ttk.Frame):
         """Update the track plot with velocity colouring (legacy single-track method)."""
         fig = self.track_canvas.get_figure()
         fig.clear()
+        colours = self._get_plot_colours()
+        self._style_figure(fig, colours)
         ax = fig.add_subplot(111)
+        self._style_axes(ax, colours)
 
         # Calculate and plot track boundaries
         x_left, y_left, x_right, y_right = calculate_track_boundaries(track.x, track.y)
@@ -1014,7 +1111,7 @@ class ResultsPanel(ttk.Frame):
                 s=80,
                 label="Slalom cones",
                 zorder=15,
-                edgecolors="black",
+                edgecolors=colours["edge"],
                 linewidths=0.5,
             )
 
@@ -1022,8 +1119,8 @@ class ResultsPanel(ttk.Frame):
         ax.set_xlabel("x [m]")
         ax.set_ylabel("y [m]")
         ax.set_title(title)
-        ax.legend(loc="lower right")
-        ax.grid(True, alpha=0.3)
+        ax.legend(loc="lower right", labelcolor=colours["text"])
+        ax.grid(True, alpha=colours["grid_alpha"])
 
         fig.tight_layout()
         self.track_canvas.draw()
@@ -1038,6 +1135,8 @@ class ResultsPanel(ttk.Frame):
         """Update the speed vs distance plot."""
         fig = self.speed_distance_canvas.get_figure()
         fig.clear()
+        colours = self._get_plot_colours()
+        self._style_figure(fig, colours)
 
         has_autocross = autocross_data is not None
         has_skidpad = skidpad_data is not None
@@ -1047,17 +1146,22 @@ class ResultsPanel(ttk.Frame):
         axes = self._make_event_subplots(fig, has_autocross, has_skidpad)
 
         if has_autocross and axes[0] is not None:
-            self._plot_speed_distance(axes[0], autocross_data, "Autocross")
+            self._style_axes(axes[0], colours)
+            self._plot_speed_distance(axes[0], autocross_data, "Autocross", colours)
 
         if has_skidpad and axes[1] is not None:
-            self._plot_speed_distance(axes[1], skidpad_data, "Skidpad")
+            self._style_axes(axes[1], colours)
+            self._plot_speed_distance(axes[1], skidpad_data, "Skidpad", colours)
 
         fig.tight_layout()
         self.speed_distance_canvas.draw()
 
-    def _plot_speed_distance(self, ax, data: dict, event_name: str):
+    def _plot_speed_distance(self, ax, data: dict, event_name: str, colours: dict = None):
         """Plot speed vs distance on a single axes."""
         from matplotlib.ticker import ScalarFormatter
+
+        if colours is None:
+            colours = self._get_plot_colours()
 
         track = data["track"]
         v = data["v"]
@@ -1071,8 +1175,8 @@ class ResultsPanel(ttk.Frame):
         ax.set_xlabel("Distance [m]")
         ax.set_ylabel("Speed [m/s]")
         ax.set_title(f"{event_name} — Speed vs Distance")
-        ax.legend(loc="upper right", fontsize=8)
-        ax.grid(True, alpha=0.3)
+        ax.legend(loc="upper right", fontsize=8, labelcolor=colours["text"])
+        ax.grid(True, alpha=colours["grid_alpha"])
 
         # Skidpad steady-state formatting
         v_range = np.max(v) - np.min(v)
@@ -1081,6 +1185,81 @@ class ResultsPanel(ttk.Frame):
             ax.set_ylim(avg_speed - margin, avg_speed + margin)
         ax.yaxis.set_major_formatter(ScalarFormatter(useOffset=False))
         ax.ticklabel_format(style="plain", axis="y")
+
+    # ------------------------------------------------------------------
+    # Acceleration vs Distance
+    # ------------------------------------------------------------------
+
+    def update_accel_distance_plot(
+        self, autocross_data: dict = None, skidpad_data: dict = None
+    ):
+        """Update the acceleration vs distance plot."""
+        fig = self.accel_distance_canvas.get_figure()
+        fig.clear()
+        colours = self._get_plot_colours()
+        self._style_figure(fig, colours)
+
+        has_autocross = autocross_data is not None
+        has_skidpad = skidpad_data is not None
+        if not has_autocross and not has_skidpad:
+            return
+
+        axes = self._make_event_subplots(fig, has_autocross, has_skidpad)
+
+        if has_autocross and axes[0] is not None:
+            self._style_axes(axes[0], colours)
+            self._plot_accel_distance(axes[0], autocross_data, "Autocross", colours)
+
+        if has_skidpad and axes[1] is not None:
+            self._style_axes(axes[1], colours)
+            self._plot_accel_distance(axes[1], skidpad_data, "Skidpad", colours)
+
+        fig.tight_layout()
+        self.accel_distance_canvas.draw()
+
+    def _plot_accel_distance(self, ax, data: dict, event_name: str, colours: dict = None):
+        """Plot longitudinal and lateral acceleration vs distance."""
+        if colours is None:
+            colours = self._get_plot_colours()
+
+        track = data["track"]
+        v = data["v"]
+        g = 9.81
+
+        # Compute acceleration channels
+        # Lateral: a_y = v² × κ
+        ay = v**2 * np.abs(track.kappa)
+
+        # Longitudinal: a_x = (v²[i+1] - v²[i]) / (2 × ds)
+        ax_vals = np.zeros(len(v) - 1)
+        for i in range(len(v) - 1):
+            ds = track.ds[i]
+            if ds > 0:
+                ax_vals[i] = (v[i + 1]**2 - v[i]**2) / (2 * ds)
+
+        s_seg = track.s[:-1]  # Segment start points
+
+        # Plot longitudinal acceleration
+        ax.fill_between(
+            s_seg, 0, ax_vals / g,
+            where=(ax_vals >= 0), color="#2ecc71", alpha=0.4, label="Driving"
+        )
+        ax.fill_between(
+            s_seg, 0, ax_vals / g,
+            where=(ax_vals < 0), color="#e74c3c", alpha=0.4, label="Braking"
+        )
+        ax.plot(s_seg, ax_vals / g, color="#333333" if colours["bg"] == "white" else "#cccccc",
+                lw=0.5, alpha=0.6)
+
+        # Plot lateral acceleration
+        ax.plot(track.s, ay / g, color="#3498db", lw=1.2, alpha=0.8, label="Lateral")
+
+        ax.axhline(0, color=colours["text"], lw=0.5, alpha=0.3)
+        ax.set_xlabel("Distance [m]")
+        ax.set_ylabel("Acceleration [g]")
+        ax.set_title(f"{event_name} — Acceleration vs Distance")
+        ax.legend(loc="upper right", fontsize=8, labelcolor=colours["text"])
+        ax.grid(True, alpha=colours["grid_alpha"])
 
     # ------------------------------------------------------------------
     # Motor RPM vs Distance
@@ -1092,6 +1271,8 @@ class ResultsPanel(ttk.Frame):
         """Update the motor RPM vs distance plot."""
         fig = self.rpm_distance_canvas.get_figure()
         fig.clear()
+        colours = self._get_plot_colours()
+        self._style_figure(fig, colours)
 
         has_autocross = autocross_data is not None
         has_skidpad = skidpad_data is not None
@@ -1101,16 +1282,21 @@ class ResultsPanel(ttk.Frame):
         axes = self._make_event_subplots(fig, has_autocross, has_skidpad)
 
         if has_autocross and axes[0] is not None:
-            self._plot_rpm_distance(axes[0], autocross_data, "Autocross")
+            self._style_axes(axes[0], colours)
+            self._plot_rpm_distance(axes[0], autocross_data, "Autocross", colours)
 
         if has_skidpad and axes[1] is not None:
-            self._plot_rpm_distance(axes[1], skidpad_data, "Skidpad")
+            self._style_axes(axes[1], colours)
+            self._plot_rpm_distance(axes[1], skidpad_data, "Skidpad", colours)
 
         fig.tight_layout()
         self.rpm_distance_canvas.draw()
 
-    def _plot_rpm_distance(self, ax, data: dict, event_name: str):
+    def _plot_rpm_distance(self, ax, data: dict, event_name: str, colours: dict = None):
         """Plot motor RPM vs distance on a single axes."""
+        if colours is None:
+            colours = self._get_plot_colours()
+
         rpm_profile = data.get("motor_rpm_profile")
         if rpm_profile is None:
             ax.text(
@@ -1139,8 +1325,8 @@ class ResultsPanel(ttk.Frame):
         ax.set_xlabel("Distance [m]")
         ax.set_ylabel("Motor RPM")
         ax.set_title(f"{event_name} — Motor RPM vs Distance")
-        ax.legend(loc="upper right", fontsize=8)
-        ax.grid(True, alpha=0.3)
+        ax.legend(loc="upper right", fontsize=8, labelcolor=colours["text"])
+        ax.grid(True, alpha=colours["grid_alpha"])
 
     # ------------------------------------------------------------------
     # Power Demand vs Distance
@@ -1152,6 +1338,8 @@ class ResultsPanel(ttk.Frame):
         """Update the mechanical power demand vs distance plot."""
         fig = self.power_demand_canvas.get_figure()
         fig.clear()
+        colours = self._get_plot_colours()
+        self._style_figure(fig, colours)
 
         has_autocross = autocross_data is not None
         has_skidpad = skidpad_data is not None
@@ -1161,16 +1349,21 @@ class ResultsPanel(ttk.Frame):
         axes = self._make_event_subplots(fig, has_autocross, has_skidpad)
 
         if has_autocross and axes[0] is not None:
-            self._plot_power_demand(axes[0], autocross_data, "Autocross")
+            self._style_axes(axes[0], colours)
+            self._plot_power_demand(axes[0], autocross_data, "Autocross", colours)
 
         if has_skidpad and axes[1] is not None:
-            self._plot_power_demand(axes[1], skidpad_data, "Skidpad")
+            self._style_axes(axes[1], colours)
+            self._plot_power_demand(axes[1], skidpad_data, "Skidpad", colours)
 
         fig.tight_layout()
         self.power_demand_canvas.draw()
 
-    def _plot_power_demand(self, ax, data: dict, event_name: str):
+    def _plot_power_demand(self, ax, data: dict, event_name: str, colours: dict = None):
         """Plot mechanical power demand vs distance on a single axes."""
+        if colours is None:
+            colours = self._get_plot_colours()
+
         vehicle = data.get("vehicle")
         if vehicle is None:
             ax.text(
@@ -1217,8 +1410,8 @@ class ResultsPanel(ttk.Frame):
         ax.set_xlabel("Distance [m]")
         ax.set_ylabel("Mechanical Power [kW]")
         ax.set_title(f"{event_name} — Power Demand vs Distance")
-        ax.legend(loc="upper right", fontsize=8)
-        ax.grid(True, alpha=0.3)
+        ax.legend(loc="upper right", fontsize=8, labelcolor=colours["text"])
+        ax.grid(True, alpha=colours["grid_alpha"])
 
     @staticmethod
     def _compute_mechanical_power(track, v, vehicle):
@@ -1273,21 +1466,28 @@ class ResultsPanel(ttk.Frame):
         """Update the lap time vs gear ratio sweep plot."""
         fig = self.gear_ratio_sweep_canvas.get_figure()
         fig.clear()
+        colours = self._get_plot_colours()
+        self._style_figure(fig, colours)
         ax = fig.add_subplot(111)
+        self._style_axes(ax, colours)
 
         self._plot_sweep_on_ax(
             ax, sweep_data,
             xlabel="Gear Ratio [-]",
             title="Autocross Lap Time vs Gear Ratio",
             value_fmt=".2f",
+            colours=colours,
         )
 
         fig.tight_layout()
         self.gear_ratio_sweep_canvas.draw()
 
     @staticmethod
-    def _plot_sweep_on_ax(ax, sweep_data, xlabel, title, value_fmt):
+    def _plot_sweep_on_ax(ax, sweep_data, xlabel, title, value_fmt, colours=None):
         """Plot a single sensitivity sweep on the given axes."""
+        if colours is None:
+            colours = {"bg": "white", "text": "black", "grid_alpha": 0.3, "edge": "black"}
+
         if sweep_data is None:
             ax.text(
                 0.5, 0.5,
@@ -1336,8 +1536,8 @@ class ResultsPanel(ttk.Frame):
         ax.set_xlabel(xlabel)
         ax.set_ylabel("Lap Time [s]")
         ax.set_title(title)
-        ax.legend(loc="best", fontsize=8)
-        ax.grid(True, alpha=0.3)
+        ax.legend(loc="best", fontsize=8, labelcolor=colours["text"])
+        ax.grid(True, alpha=colours["grid_alpha"])
 
     # ------------------------------------------------------------------
     # Subplot layout helper
@@ -1362,6 +1562,8 @@ class ResultsPanel(ttk.Frame):
         """Update the battery analysis plot for both events."""
         fig = self.battery_canvas.get_figure()
         fig.clear()
+        colours = self._get_plot_colours()
+        self._style_figure(fig, colours)
 
         has_autocross = autocross_data is not None and "battery_state" in autocross_data
         has_skidpad = skidpad_data is not None and "battery_state" in skidpad_data
@@ -1369,6 +1571,7 @@ class ResultsPanel(ttk.Frame):
         if not has_autocross and not has_skidpad:
             # No battery data available
             ax = fig.add_subplot(111)
+            self._style_axes(ax, colours)
             ax.text(
                 0.5,
                 0.5,
@@ -1404,6 +1607,11 @@ class ResultsPanel(ttk.Frame):
             ax6 = fig.add_subplot(313)
             ax1 = ax3 = ax5 = None
 
+        # Apply theme to all axes
+        for _ax in (ax1, ax2, ax3, ax4, ax5, ax6):
+            if _ax is not None:
+                self._style_axes(_ax, colours)
+
         # Plot Autocross battery
         if has_autocross:
             track = autocross_data["track"]
@@ -1424,8 +1632,8 @@ class ResultsPanel(ttk.Frame):
             )
             ax1.set_ylabel("SoC [%]")
             ax1.set_ylim(0, 105)
-            ax1.legend(loc="upper right", fontsize=7)
-            ax1.grid(True, alpha=0.3)
+            ax1.legend(loc="upper right", fontsize=7, labelcolor=colours["text"])
+            ax1.grid(True, alpha=colours["grid_alpha"])
             ax1.set_title("Autocross - State of Charge")
 
             # Power
@@ -1439,8 +1647,8 @@ class ResultsPanel(ttk.Frame):
                 label=f"Max ({vehicle.battery.max_discharge_kW:.0f} kW)",
             )
             ax3.set_ylabel("Power [kW]")
-            ax3.legend(loc="upper right", fontsize=7)
-            ax3.grid(True, alpha=0.3)
+            ax3.legend(loc="upper right", fontsize=7, labelcolor=colours["text"])
+            ax3.grid(True, alpha=colours["grid_alpha"])
             ax3.set_title("Autocross - Discharge Power")
 
             # Energy
@@ -1458,8 +1666,8 @@ class ResultsPanel(ttk.Frame):
             )
             ax5.set_xlabel("Distance [m]")
             ax5.set_ylabel("Energy [Wh]")
-            ax5.legend(loc="upper left", fontsize=7)
-            ax5.grid(True, alpha=0.3)
+            ax5.legend(loc="upper left", fontsize=7, labelcolor=colours["text"])
+            ax5.grid(True, alpha=colours["grid_alpha"])
             ax5.set_title("Autocross - Cumulative Energy")
 
         # Plot Skidpad battery
@@ -1484,8 +1692,8 @@ class ResultsPanel(ttk.Frame):
             )
             ax2.set_ylabel("SoC [%]")
             ax2.set_ylim(0, 105)
-            ax2.legend(loc="upper right", fontsize=7)
-            ax2.grid(True, alpha=0.3)
+            ax2.legend(loc="upper right", fontsize=7, labelcolor=colours["text"])
+            ax2.grid(True, alpha=colours["grid_alpha"])
 
             # For skidpad, SoC drop is very small - show it meaningfully
             soc_drop = (battery_state.soc[0] - battery_state.soc[-1]) * 100
@@ -1503,8 +1711,8 @@ class ResultsPanel(ttk.Frame):
                 label=f"Max ({vehicle.battery.max_discharge_kW:.0f} kW)",
             )
             ax4.set_ylabel("Power [kW]")
-            ax4.legend(loc="upper right", fontsize=7)
-            ax4.grid(True, alpha=0.3)
+            ax4.legend(loc="upper right", fontsize=7, labelcolor=colours["text"])
+            ax4.grid(True, alpha=colours["grid_alpha"])
 
             # For constant power, set sensible y-axis and show the value in title
             power_mean = np.mean(power_kW)
@@ -1535,8 +1743,8 @@ class ResultsPanel(ttk.Frame):
             )
             ax6.set_xlabel("Distance [m]")
             ax6.set_ylabel("Energy [Wh]")
-            ax6.legend(loc="upper left", fontsize=7)
-            ax6.grid(True, alpha=0.3)
+            ax6.legend(loc="upper left", fontsize=7, labelcolor=colours["text"])
+            ax6.grid(True, alpha=colours["grid_alpha"])
 
             # Show actual energy used in title
             energy_used_Wh = (
@@ -1553,11 +1761,16 @@ class ResultsPanel(ttk.Frame):
         """Update the battery analysis plot (legacy single-event method)."""
         fig = self.battery_canvas.get_figure()
         fig.clear()
+        colours = self._get_plot_colours()
+        self._style_figure(fig, colours)
 
         # Three subplots: SoC, Power, Energy
         ax1 = fig.add_subplot(311)
         ax2 = fig.add_subplot(312, sharex=ax1)
         ax3 = fig.add_subplot(313, sharex=ax1)
+        self._style_axes(ax1, colours)
+        self._style_axes(ax2, colours)
+        self._style_axes(ax3, colours)
 
         # SoC plot
         ax1.plot(track.s, battery_state.soc * 100, "b-", lw=2)
@@ -1572,8 +1785,8 @@ class ResultsPanel(ttk.Frame):
         )
         ax1.set_ylabel("State of Charge [%]")
         ax1.set_ylim(0, 105)
-        ax1.legend(loc="upper right")
-        ax1.grid(True, alpha=0.3)
+        ax1.legend(loc="upper right", labelcolor=colours["text"])
+        ax1.grid(True, alpha=colours["grid_alpha"])
         ax1.set_title("Battery State of Charge")
 
         # Power plot
@@ -1587,8 +1800,8 @@ class ResultsPanel(ttk.Frame):
             label=f"Max ({vehicle.battery.max_discharge_kW:.0f} kW)",
         )
         ax2.set_ylabel("Power [kW]")
-        ax2.legend(loc="upper right")
-        ax2.grid(True, alpha=0.3)
+        ax2.legend(loc="upper right", labelcolor=colours["text"])
+        ax2.grid(True, alpha=colours["grid_alpha"])
         ax2.set_title("Discharge Power")
 
         # Energy plot
@@ -1603,8 +1816,8 @@ class ResultsPanel(ttk.Frame):
         )
         ax3.set_xlabel("Distance [m]")
         ax3.set_ylabel("Energy [Wh]")
-        ax3.legend(loc="upper left")
-        ax3.grid(True, alpha=0.3)
+        ax3.legend(loc="upper left", labelcolor=colours["text"])
+        ax3.grid(True, alpha=colours["grid_alpha"])
         ax3.set_title("Cumulative Energy")
 
         # Status text
@@ -1633,11 +1846,13 @@ class ResultsPanel(ttk.Frame):
             "layout": 1,
             "track": 2,
             "speed_distance": 3,
-            "rpm_distance": 4,
-            "power_demand": 5,
-            "gear_ratio_sweep": 6,
-            "battery": 7,
-            "optimiser": 8,
+            "accel_distance": 4,
+            "rpm_distance": 5,
+            "power_demand": 6,
+            "gear_ratio_sweep": 7,
+            "battery": 8,
+            "optimiser": 9,
+            "comparison": 10,
         }
         if tab_name in tab_map:
             self.notebook.select(tab_map[tab_name])
