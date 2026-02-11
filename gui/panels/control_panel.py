@@ -34,6 +34,7 @@ class ControlPanel(ttk.Frame):
         self.on_save_results = on_save_results
         self.default_config = self._load_default_config()
         self.motor_database = self._load_motor_database()
+        self.tyre_database = self._load_tyre_database()
 
         # Create scrollable frame
         self.canvas = tk.Canvas(self, highlightthickness=0)
@@ -117,6 +118,21 @@ class ControlPanel(ttk.Frame):
                 }
             }
 
+    def _load_tyre_database(self) -> Dict[str, dict]:
+        """Load tyre database from YAML."""
+        tyres_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            "config",
+            "tyres.yaml",
+        )
+        try:
+            with open(tyres_path, "r") as f:
+                data = yaml.safe_load(f)
+                return data.get("tyres", {})
+        except Exception as e:
+            print(f"Warning: Could not load tyre database: {e}")
+            return {}
+
     def _get_motor_list(self) -> List[tuple]:
         """Get list of (display_name, motor_id) tuples for dropdown."""
         motors = []
@@ -141,7 +157,31 @@ class ControlPanel(ttk.Frame):
                 "mass_electronics_kg": 25,
             },
             "aero": {"rho": 1.225, "Cd": 1.1, "Cl": 1.5, "A": 1.0},
-            "tyre": {"mu": 1.6},
+            "tyre": {
+                "model": "simple",
+                "mu": 1.6,
+                "C_alpha_f": 45000,
+                "C_alpha_r": 50000,
+                "pacejka": {
+                    "tyre_preset": "hoosier_r25b_18x6",
+                    "mu_peak": 1.6,
+                    "Fz_nominal": 1500.0,
+                    "lateral": {
+                        "C": 1.45, "a1": -0.00013, "a2": 1.8,
+                        "a3": 50000, "a4": 2.0, "a5": 0.00035,
+                        "a6": -0.0002, "a7": -0.5,
+                    },
+                    "longitudinal": {
+                        "C": 1.65, "a1": -0.00013, "a2": 1.7,
+                        "a3": 45000, "a4": 2.0, "a5": 0.0004,
+                        "a6": -0.0002, "a7": -0.3,
+                    },
+                    "combined": {
+                        "B_xa": 10.0, "C_xa": 1.0,
+                        "B_yk": 10.0, "C_yk": 1.0,
+                    },
+                },
+            },
             "powertrain": {
                 "drivetrain": "2RWD",
                 "motor": "emrax_208",  # EMRAX 208 motor
@@ -254,14 +294,8 @@ class ControlPanel(ttk.Frame):
             ],
         )
 
-        # Tyre parameters
-        self._create_param_section(
-            "TYRE",
-            "tyre",
-            [
-                ("mu", "Friction (μ)", ""),
-            ],
-        )
+        # Tyre parameters with model selection
+        self._create_tyre_section()
 
         # Powertrain parameters with drivetrain selection
         self._create_powertrain_section()
@@ -433,6 +467,301 @@ class ControlPanel(ttk.Frame):
         self.total_mass_var.set(f"{total:.1f}")
         # Also update the main mass_kg variable
         self.mass_standard_var.set(f"{total:.1f}")
+
+    def _create_tyre_section(self):
+        """Create tyre section with model selection, presets, and Pacejka coefficients."""
+        frame = ttk.LabelFrame(self.scrollable_frame, text="TYRE", padding=(10, 5))
+        frame.pack(fill="x", padx=10, pady=5)
+        self.tyre_frame = frame
+
+        self.param_entries["tyre"] = {}
+        self.param_widgets["tyre"] = {}
+        defaults = self.default_config.get("tyre", {})
+        pac_defaults = defaults.get("pacejka", {})
+
+        row = 0
+
+        # ---- Tyre Model dropdown ----
+        model_label = ttk.Label(frame, text="Tyre Model", width=16, anchor="w")
+        model_label.grid(row=row, column=0, sticky="w", padx=5, pady=2)
+
+        self.tyre_model_var = tk.StringVar(
+            value="Pacejka" if defaults.get("model", "simple") == "pacejka" else "Simple"
+        )
+        self.tyre_model_combo = ttk.Combobox(
+            frame,
+            textvariable=self.tyre_model_var,
+            values=["Simple", "Pacejka"],
+            state="readonly",
+            width=10,
+        )
+        self.tyre_model_combo.grid(row=row, column=1, sticky="w", padx=5, pady=2)
+        self.tyre_model_combo.bind("<<ComboboxSelected>>", lambda e: self._on_tyre_model_change())
+        self.tyre_model_widgets = [model_label, self.tyre_model_combo]
+        row += 1
+
+        # ---- Simple mode: mu field ----
+        mu_label = ttk.Label(frame, text="Friction (mu)", width=16, anchor="w")
+        mu_label.grid(row=row, column=0, sticky="w", padx=5, pady=2)
+
+        mu_var = tk.StringVar(value=str(defaults.get("mu", 1.6)))
+        mu_entry = ttk.Entry(frame, textvariable=mu_var, width=10)
+        mu_entry.grid(row=row, column=1, sticky="w", padx=5, pady=2)
+
+        self.param_entries["tyre"]["mu"] = mu_var
+        self.param_widgets["tyre"]["mu"] = mu_entry
+        self.tyre_simple_widgets = [mu_label, mu_entry]
+        row += 1
+
+        # ---- Pacejka mode widgets ----
+        self.tyre_pacejka_widgets = []
+
+        # Tyre Preset dropdown
+        preset_label = ttk.Label(frame, text="Tyre Preset", width=16, anchor="w")
+        preset_label.grid(row=row, column=0, sticky="w", padx=5, pady=2)
+
+        # Build preset list from database
+        tyre_list = []
+        self.tyre_id_map = {}
+        for tyre_id, tyre_data in self.tyre_database.items():
+            name = tyre_data.get("name", tyre_id)
+            tyre_list.append(name)
+            self.tyre_id_map[name] = tyre_id
+        tyre_list.append("Custom")
+        self.tyre_id_map["Custom"] = "custom"
+
+        # Find default preset name
+        default_preset_id = pac_defaults.get("tyre_preset", "")
+        default_preset_name = "Custom"
+        for name, tid in self.tyre_id_map.items():
+            if tid == default_preset_id:
+                default_preset_name = name
+                break
+
+        self.tyre_preset_var = tk.StringVar(value=default_preset_name)
+        self.tyre_preset_combo = ttk.Combobox(
+            frame,
+            textvariable=self.tyre_preset_var,
+            values=tyre_list,
+            state="readonly",
+            width=22,
+        )
+        self.tyre_preset_combo.grid(row=row, column=1, columnspan=2, sticky="w", padx=5, pady=2)
+        self.tyre_preset_combo.bind("<<ComboboxSelected>>", lambda e: self._on_tyre_preset_change())
+        self.tyre_pacejka_widgets.extend([preset_label, self.tyre_preset_combo])
+        row += 1
+
+        # mu_peak, Fz_nominal, C_alpha_f, C_alpha_r
+        pac_ref_params = [
+            ("mu_peak", "Peak mu", "", pac_defaults),
+            ("Fz_nominal", "Nominal Fz", "N", pac_defaults),
+            ("C_alpha_f", "C_alpha front", "N/rad", defaults),
+            ("C_alpha_r", "C_alpha rear", "N/rad", defaults),
+        ]
+        for key, label_text, unit, src in pac_ref_params:
+            lbl = ttk.Label(frame, text=label_text, width=16, anchor="w")
+            lbl.grid(row=row, column=0, sticky="w", padx=5, pady=2)
+            val = src.get(key, 0)
+            var = tk.StringVar(value=str(val))
+            entry = ttk.Entry(frame, textvariable=var, width=10)
+            entry.grid(row=row, column=1, sticky="w", padx=5, pady=2)
+            if unit:
+                u_lbl = ttk.Label(frame, text=unit, style="Unit.TLabel", width=6)
+                u_lbl.grid(row=row, column=2, sticky="w", pady=2)
+                self.tyre_pacejka_widgets.append(u_lbl)
+            self.param_entries["tyre"][key] = var
+            self.param_widgets["tyre"][key] = entry
+            self.tyre_pacejka_widgets.extend([lbl, entry])
+            row += 1
+
+        # ---- Lateral coefficients ----
+        lat_sep = ttk.Label(frame, text="--- Lateral ---", anchor="center")
+        lat_sep.grid(row=row, column=0, columnspan=3, pady=(6, 2))
+        self.tyre_pacejka_widgets.append(lat_sep)
+        row += 1
+
+        lat_defaults = pac_defaults.get("lateral", {})
+        lat_params = [
+            ("C_lat", "C (shape)", ""),
+            ("a1_lat", "a1", ""),
+            ("a2_lat", "a2", ""),
+            ("a3_lat", "a3", ""),
+            ("a4_lat", "a4", ""),
+            ("a5_lat", "a5", ""),
+            ("a6_lat", "a6", ""),
+            ("a7_lat", "a7", ""),
+        ]
+        # Map from GUI key to yaml key
+        lat_yaml_keys = {"C_lat": "C", "a1_lat": "a1", "a2_lat": "a2",
+                         "a3_lat": "a3", "a4_lat": "a4", "a5_lat": "a5",
+                         "a6_lat": "a6", "a7_lat": "a7"}
+        for key, label_text, unit in lat_params:
+            lbl = ttk.Label(frame, text=label_text, width=16, anchor="w")
+            lbl.grid(row=row, column=0, sticky="w", padx=5, pady=1)
+            yaml_key = lat_yaml_keys[key]
+            val = lat_defaults.get(yaml_key, 0)
+            var = tk.StringVar(value=str(val))
+            entry = ttk.Entry(frame, textvariable=var, width=10)
+            entry.grid(row=row, column=1, sticky="w", padx=5, pady=1)
+            self.param_entries["tyre"][key] = var
+            self.param_widgets["tyre"][key] = entry
+            self.tyre_pacejka_widgets.extend([lbl, entry])
+            row += 1
+
+        # ---- Longitudinal coefficients ----
+        lon_sep = ttk.Label(frame, text="--- Longitudinal ---", anchor="center")
+        lon_sep.grid(row=row, column=0, columnspan=3, pady=(6, 2))
+        self.tyre_pacejka_widgets.append(lon_sep)
+        row += 1
+
+        lon_defaults = pac_defaults.get("longitudinal", {})
+        lon_params = [
+            ("C_lon", "C (shape)", ""),
+            ("a1_lon", "a1", ""),
+            ("a2_lon", "a2", ""),
+            ("a3_lon", "a3", ""),
+            ("a4_lon", "a4", ""),
+            ("a5_lon", "a5", ""),
+            ("a6_lon", "a6", ""),
+            ("a7_lon", "a7", ""),
+        ]
+        lon_yaml_keys = {"C_lon": "C", "a1_lon": "a1", "a2_lon": "a2",
+                         "a3_lon": "a3", "a4_lon": "a4", "a5_lon": "a5",
+                         "a6_lon": "a6", "a7_lon": "a7"}
+        for key, label_text, unit in lon_params:
+            lbl = ttk.Label(frame, text=label_text, width=16, anchor="w")
+            lbl.grid(row=row, column=0, sticky="w", padx=5, pady=1)
+            yaml_key = lon_yaml_keys[key]
+            val = lon_defaults.get(yaml_key, 0)
+            var = tk.StringVar(value=str(val))
+            entry = ttk.Entry(frame, textvariable=var, width=10)
+            entry.grid(row=row, column=1, sticky="w", padx=5, pady=1)
+            self.param_entries["tyre"][key] = var
+            self.param_widgets["tyre"][key] = entry
+            self.tyre_pacejka_widgets.extend([lbl, entry])
+            row += 1
+
+        # ---- Combined slip ----
+        comb_sep = ttk.Label(frame, text="--- Combined Slip ---", anchor="center")
+        comb_sep.grid(row=row, column=0, columnspan=3, pady=(6, 2))
+        self.tyre_pacejka_widgets.append(comb_sep)
+        row += 1
+
+        comb_defaults = pac_defaults.get("combined", {})
+        comb_params = [
+            ("B_xa", "B_xa", ""),
+            ("C_xa", "C_xa", ""),
+            ("B_yk", "B_yk", ""),
+            ("C_yk", "C_yk", ""),
+        ]
+        for key, label_text, unit in comb_params:
+            lbl = ttk.Label(frame, text=label_text, width=16, anchor="w")
+            lbl.grid(row=row, column=0, sticky="w", padx=5, pady=1)
+            val = comb_defaults.get(key, 0)
+            var = tk.StringVar(value=str(val))
+            entry = ttk.Entry(frame, textvariable=var, width=10)
+            entry.grid(row=row, column=1, sticky="w", padx=5, pady=1)
+            self.param_entries["tyre"][key] = var
+            self.param_widgets["tyre"][key] = entry
+            self.tyre_pacejka_widgets.extend([lbl, entry])
+            row += 1
+
+        # Initial visibility
+        self._on_tyre_model_change()
+
+    def _on_tyre_model_change(self):
+        """Show/hide tyre fields based on selected model."""
+        is_pacejka = self.tyre_model_var.get() == "Pacejka"
+
+        # Pacejka widgets: show/hide
+        for widget in self.tyre_pacejka_widgets:
+            if is_pacejka:
+                widget.grid()
+            else:
+                widget.grid_remove()
+
+        # Simple mu field: always visible but only relevant for Simple
+        # (Pacejka uses mu_peak instead)
+        for widget in self.tyre_simple_widgets:
+            if is_pacejka:
+                widget.grid_remove()
+            else:
+                widget.grid()
+
+    def _on_tyre_preset_change(self):
+        """Populate Pacejka coefficient fields from selected tyre preset."""
+        preset_name = self.tyre_preset_var.get()
+        tyre_id = self.tyre_id_map.get(preset_name, "custom")
+
+        if tyre_id == "custom":
+            # Enable manual editing — update widget states
+            self._update_tyre_coeff_state()
+            return
+
+        # Load preset data
+        tyre_data = self.tyre_database.get(tyre_id, {})
+        if not tyre_data:
+            return
+
+        # Populate reference fields
+        if "mu_peak" in self.param_entries["tyre"]:
+            self.param_entries["tyre"]["mu_peak"].set(str(tyre_data.get("mu_peak", 1.6)))
+        if "Fz_nominal" in self.param_entries["tyre"]:
+            self.param_entries["tyre"]["Fz_nominal"].set(str(tyre_data.get("Fz_nominal", 1500)))
+        if "C_alpha_f" in self.param_entries["tyre"]:
+            self.param_entries["tyre"]["C_alpha_f"].set(str(tyre_data.get("C_alpha_f", 45000)))
+        if "C_alpha_r" in self.param_entries["tyre"]:
+            self.param_entries["tyre"]["C_alpha_r"].set(str(tyre_data.get("C_alpha_r", 50000)))
+
+        # Populate lateral coefficients
+        lat = tyre_data.get("lateral", {})
+        lat_map = {"C_lat": "C", "a1_lat": "a1", "a2_lat": "a2",
+                   "a3_lat": "a3", "a4_lat": "a4", "a5_lat": "a5",
+                   "a6_lat": "a6", "a7_lat": "a7"}
+        for gui_key, yaml_key in lat_map.items():
+            if gui_key in self.param_entries["tyre"]:
+                self.param_entries["tyre"][gui_key].set(str(lat.get(yaml_key, 0)))
+
+        # Populate longitudinal coefficients
+        lon = tyre_data.get("longitudinal", {})
+        lon_map = {"C_lon": "C", "a1_lon": "a1", "a2_lon": "a2",
+                   "a3_lon": "a3", "a4_lon": "a4", "a5_lon": "a5",
+                   "a6_lon": "a6", "a7_lon": "a7"}
+        for gui_key, yaml_key in lon_map.items():
+            if gui_key in self.param_entries["tyre"]:
+                self.param_entries["tyre"][gui_key].set(str(lon.get(yaml_key, 0)))
+
+        # Populate combined slip
+        comb = tyre_data.get("combined", {})
+        for key in ("B_xa", "C_xa", "B_yk", "C_yk"):
+            if key in self.param_entries["tyre"]:
+                self.param_entries["tyre"][key].set(str(comb.get(key, 0)))
+
+        # Update widget states (readonly for preset)
+        self._update_tyre_coeff_state()
+
+    def _update_tyre_coeff_state(self):
+        """Update Pacejka coefficient entry states based on preset selection."""
+        is_custom = self.config_var.get() == "custom"
+        is_custom_tyre = self.tyre_id_map.get(self.tyre_preset_var.get()) == "custom"
+
+        # Pacejka coefficient keys
+        pac_keys = [
+            "mu_peak", "Fz_nominal", "C_alpha_f", "C_alpha_r",
+            "C_lat", "a1_lat", "a2_lat", "a3_lat", "a4_lat", "a5_lat", "a6_lat", "a7_lat",
+            "C_lon", "a1_lon", "a2_lon", "a3_lon", "a4_lon", "a5_lon", "a6_lon", "a7_lon",
+            "B_xa", "C_xa", "B_yk", "C_yk",
+        ]
+
+        for key in pac_keys:
+            if key in self.param_widgets["tyre"]:
+                entry = self.param_widgets["tyre"][key]
+                if not is_custom:
+                    entry.configure(state="disabled")
+                elif is_custom_tyre:
+                    entry.configure(state="normal")
+                else:
+                    entry.configure(state="readonly")
 
     def _create_powertrain_section(self):
         """Create powertrain section with motor selection, drivetrain, and parameters."""
@@ -1389,11 +1718,22 @@ class ControlPanel(ttk.Frame):
         # Toggle mass breakdown view
         self._toggle_mass_breakdown(show_breakdown=is_custom)
 
+        # Pacejka coefficient keys — handled separately by _update_tyre_coeff_state
+        _pac_keys = {
+            "mu_peak", "Fz_nominal", "C_alpha_f", "C_alpha_r",
+            "C_lat", "a1_lat", "a2_lat", "a3_lat", "a4_lat", "a5_lat", "a6_lat", "a7_lat",
+            "C_lon", "a1_lon", "a2_lon", "a3_lon", "a4_lon", "a5_lon", "a6_lon", "a7_lon",
+            "B_xa", "C_xa", "B_yk", "C_yk",
+        }
+
         # Update all parameter entry widgets
         for section, widgets in self.param_widgets.items():
             for key, entry in widgets.items():
                 # Skip mass breakdown entries in standard mode (they're hidden)
                 if not is_custom and key.startswith("mass_") and key != "mass_kg":
+                    continue
+                # Skip Pacejka coefficients — handled below
+                if section == "tyre" and key in _pac_keys:
                     continue
                 # Motor specs: editable only for custom motor, else readonly/disabled
                 if key in (
@@ -1420,6 +1760,14 @@ class ControlPanel(ttk.Frame):
             calc_state = "readonly" if is_custom else "disabled"
             for entry in self.calculated_entries:
                 entry.configure(state=calc_state)
+
+        # Update tyre model dropdown and Pacejka coefficients
+        if hasattr(self, "tyre_model_combo"):
+            self.tyre_model_combo.configure(state="readonly" if is_custom else "disabled")
+        if hasattr(self, "tyre_preset_combo"):
+            self.tyre_preset_combo.configure(state="readonly" if is_custom else "disabled")
+        if hasattr(self, "_update_tyre_coeff_state"):
+            self._update_tyre_coeff_state()
 
         # Update motor dropdown — disabled in standard mode
         if hasattr(self, "motor_combo"):
@@ -1559,6 +1907,55 @@ class ControlPanel(ttk.Frame):
                 )
             self._update_total_mass()
 
+        # Handle tyre model selection if present
+        if "tyre" in config and hasattr(self, "tyre_model_var"):
+            tyre_config = config["tyre"]
+            tyre_model = tyre_config.get("model", "simple")
+            self.tyre_model_var.set("Pacejka" if tyre_model == "pacejka" else "Simple")
+
+            if tyre_model == "pacejka" and "pacejka" in tyre_config:
+                pac = tyre_config["pacejka"]
+                # Set preset
+                preset_id = pac.get("tyre_preset", "custom")
+                preset_name = "Custom"
+                for name, tid in self.tyre_id_map.items():
+                    if tid == preset_id:
+                        preset_name = name
+                        break
+                self.tyre_preset_var.set(preset_name)
+
+                # Set reference fields
+                if "mu_peak" in self.param_entries["tyre"]:
+                    self.param_entries["tyre"]["mu_peak"].set(str(pac.get("mu_peak", 1.6)))
+                if "Fz_nominal" in self.param_entries["tyre"]:
+                    self.param_entries["tyre"]["Fz_nominal"].set(str(pac.get("Fz_nominal", 1500)))
+
+                # Set lateral coefficients
+                lat = pac.get("lateral", {})
+                lat_map = {"C_lat": "C", "a1_lat": "a1", "a2_lat": "a2",
+                           "a3_lat": "a3", "a4_lat": "a4", "a5_lat": "a5",
+                           "a6_lat": "a6", "a7_lat": "a7"}
+                for gui_key, yaml_key in lat_map.items():
+                    if gui_key in self.param_entries["tyre"]:
+                        self.param_entries["tyre"][gui_key].set(str(lat.get(yaml_key, 0)))
+
+                # Set longitudinal coefficients
+                lon = pac.get("longitudinal", {})
+                lon_map = {"C_lon": "C", "a1_lon": "a1", "a2_lon": "a2",
+                           "a3_lon": "a3", "a4_lon": "a4", "a5_lon": "a5",
+                           "a6_lon": "a6", "a7_lon": "a7"}
+                for gui_key, yaml_key in lon_map.items():
+                    if gui_key in self.param_entries["tyre"]:
+                        self.param_entries["tyre"][gui_key].set(str(lon.get(yaml_key, 0)))
+
+                # Set combined slip
+                comb = pac.get("combined", {})
+                for key in ("B_xa", "C_xa", "B_yk", "C_yk"):
+                    if key in self.param_entries["tyre"]:
+                        self.param_entries["tyre"][key].set(str(comb.get(key, 0)))
+
+            self._on_tyre_model_change()
+
         # Handle motor and drivetrain selection if present
         if "powertrain" in config:
             # Set motor selection
@@ -1630,6 +2027,57 @@ class ControlPanel(ttk.Frame):
             for key in self.mass_breakdown_vars:
                 total_mass += config["vehicle"].get(key, 0)
             config["vehicle"]["mass_kg"] = total_mass
+
+        # Structure tyre config for Pacejka / Simple model
+        if hasattr(self, "tyre_model_var"):
+            tyre_model = "pacejka" if self.tyre_model_var.get() == "Pacejka" else "simple"
+            config["tyre"]["model"] = tyre_model
+
+            if tyre_model == "pacejka":
+                tyre_flat = config["tyre"]
+                config["tyre"]["pacejka"] = {
+                    "tyre_preset": self.tyre_id_map.get(
+                        self.tyre_preset_var.get(), "custom"
+                    ),
+                    "mu_peak": tyre_flat.pop("mu_peak", 1.6),
+                    "Fz_nominal": tyre_flat.pop("Fz_nominal", 1500.0),
+                    "lateral": {
+                        "C": tyre_flat.pop("C_lat", 1.45),
+                        "a1": tyre_flat.pop("a1_lat", -0.00013),
+                        "a2": tyre_flat.pop("a2_lat", 1.8),
+                        "a3": tyre_flat.pop("a3_lat", 50000),
+                        "a4": tyre_flat.pop("a4_lat", 2.0),
+                        "a5": tyre_flat.pop("a5_lat", 0.00035),
+                        "a6": tyre_flat.pop("a6_lat", -0.0002),
+                        "a7": tyre_flat.pop("a7_lat", -0.5),
+                    },
+                    "longitudinal": {
+                        "C": tyre_flat.pop("C_lon", 1.65),
+                        "a1": tyre_flat.pop("a1_lon", -0.00013),
+                        "a2": tyre_flat.pop("a2_lon", 1.7),
+                        "a3": tyre_flat.pop("a3_lon", 45000),
+                        "a4": tyre_flat.pop("a4_lon", 2.0),
+                        "a5": tyre_flat.pop("a5_lon", 0.0004),
+                        "a6": tyre_flat.pop("a6_lon", -0.0002),
+                        "a7": tyre_flat.pop("a7_lon", -0.3),
+                    },
+                    "combined": {
+                        "B_xa": tyre_flat.pop("B_xa", 10.0),
+                        "C_xa": tyre_flat.pop("C_xa", 1.0),
+                        "B_yk": tyre_flat.pop("B_yk", 10.0),
+                        "C_yk": tyre_flat.pop("C_yk", 1.0),
+                    },
+                }
+            else:
+                # Clean up Pacejka flat keys that leaked in from param_entries.
+                # Keep C_alpha_f/C_alpha_r so Simple uses TyreParams (bicycle
+                # model + axle-aware solver) — same solver path as Pacejka.
+                for k in list(config["tyre"].keys()):
+                    if k not in ("model", "mu", "C_alpha_f", "C_alpha_r"):
+                        del config["tyre"][k]
+                # Ensure cornering stiffness defaults are present
+                config["tyre"].setdefault("C_alpha_f", 45000.0)
+                config["tyre"].setdefault("C_alpha_r", 50000.0)
 
         # Add motor ID to powertrain config
         if hasattr(self, "motor_var") and hasattr(self, "motor_id_map"):
