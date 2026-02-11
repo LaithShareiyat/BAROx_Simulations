@@ -295,7 +295,7 @@ class ControlPanel(ttk.Frame):
         entry.grid(row=row, column=1, sticky="w", padx=5, pady=2)
         self.mass_standard_widgets.append(entry)
 
-        unit_lbl = ttk.Label(frame, text="kg", foreground="gray", width=6)
+        unit_lbl = ttk.Label(frame, text="kg", style="Unit.TLabel", width=6)
         unit_lbl.grid(row=row, column=2, sticky="w", pady=2)
         self.mass_standard_widgets.append(unit_lbl)
 
@@ -332,7 +332,7 @@ class ControlPanel(ttk.Frame):
             entry.bind("<KeyRelease>", self._update_total_mass)
             self.mass_breakdown_widgets.append(entry)
 
-            unit_lbl = ttk.Label(frame, text="kg", foreground="gray", width=6)
+            unit_lbl = ttk.Label(frame, text="kg", style="Unit.TLabel", width=6)
             unit_lbl.grid(row=comp_row, column=2, sticky="w", pady=1)
             self.mass_breakdown_widgets.append(unit_lbl)
 
@@ -366,7 +366,7 @@ class ControlPanel(ttk.Frame):
         total_entry.grid(row=total_row, column=1, sticky="w", padx=5, pady=2)
         self.mass_breakdown_widgets.append(total_entry)
 
-        total_unit = ttk.Label(frame, text="kg", foreground="gray", width=6)
+        total_unit = ttk.Label(frame, text="kg", style="Unit.TLabel", width=6)
         total_unit.grid(row=total_row, column=2, sticky="w", pady=2)
         self.mass_breakdown_widgets.append(total_unit)
 
@@ -393,7 +393,7 @@ class ControlPanel(ttk.Frame):
             self.vehicle_other_widgets.append(entry)
 
             if unit:
-                unit_lbl = ttk.Label(frame, text=unit, foreground="gray", width=6)
+                unit_lbl = ttk.Label(frame, text=unit, style="Unit.TLabel", width=6)
                 unit_lbl.grid(row=param_row, column=2, sticky="w", pady=2)
                 self.vehicle_other_widgets.append(unit_lbl)
 
@@ -511,7 +511,7 @@ class ControlPanel(ttk.Frame):
         # Description label
         self.drivetrain_desc_var = tk.StringVar(value="")
         dt_desc = ttk.Label(
-            frame, textvariable=self.drivetrain_desc_var, foreground="gray"
+            frame, textvariable=self.drivetrain_desc_var, style="Unit.TLabel"
         )
         dt_desc.grid(row=row, column=2, sticky="w", pady=2)
         self.motor_widgets.append(dt_desc)
@@ -535,7 +535,7 @@ class ControlPanel(ttk.Frame):
         self.motor_widgets.append(motor_weight_entry)
         self.motor_spec_entries_weight = motor_weight_entry  # Track for state updates
 
-        unit_lbl = ttk.Label(frame, text="kg/motor", foreground="gray", width=7)
+        unit_lbl = ttk.Label(frame, text="kg/motor", style="Unit.TLabel", width=7)
         unit_lbl.grid(row=row, column=2, sticky="w", pady=2)
         self.motor_widgets.append(unit_lbl)
 
@@ -557,7 +557,7 @@ class ControlPanel(ttk.Frame):
         self.motor_widgets.append(overhead_entry)
         self.overhead_entry = overhead_entry  # Track for state updates
 
-        unit_lbl = ttk.Label(frame, text="kg", foreground="gray", width=6)
+        unit_lbl = ttk.Label(frame, text="kg", style="Unit.TLabel", width=6)
         unit_lbl.grid(row=row, column=2, sticky="w", pady=2)
         self.motor_widgets.append(unit_lbl)
 
@@ -574,7 +574,7 @@ class ControlPanel(ttk.Frame):
         self.diff_entry.grid(row=row, column=1, sticky="w", padx=5, pady=2)
         self.diff_entry.bind("<KeyRelease>", self._update_powertrain_display)
 
-        self.diff_unit_lbl = ttk.Label(frame, text="kg", foreground="gray", width=6)
+        self.diff_unit_lbl = ttk.Label(frame, text="kg", style="Unit.TLabel", width=6)
         self.diff_unit_lbl.grid(row=row, column=2, sticky="w", pady=2)
 
         # Store references for show/hide
@@ -625,7 +625,7 @@ class ControlPanel(ttk.Frame):
             self.inverter_entries.append(entry)
 
             if unit:
-                unit_lbl = ttk.Label(frame, text=unit, foreground="gray", width=6)
+                unit_lbl = ttk.Label(frame, text=unit, style="Unit.TLabel", width=6)
                 unit_lbl.grid(row=row, column=2, sticky="w", pady=2)
                 self.motor_widgets.append(unit_lbl)
 
@@ -674,7 +674,7 @@ class ControlPanel(ttk.Frame):
             self.motor_spec_entries.append(entry)
 
             if unit:
-                unit_lbl = ttk.Label(frame, text=unit, foreground="gray", width=6)
+                unit_lbl = ttk.Label(frame, text=unit, style="Unit.TLabel", width=6)
                 unit_lbl.grid(row=row, column=2, sticky="w", pady=2)
                 self.motor_widgets.append(unit_lbl)
 
@@ -702,7 +702,7 @@ class ControlPanel(ttk.Frame):
             self.motor_widgets.append(entry)
 
             if unit:
-                unit_lbl = ttk.Label(frame, text=unit, foreground="gray", width=6)
+                unit_lbl = ttk.Label(frame, text=unit, style="Unit.TLabel", width=6)
                 unit_lbl.grid(row=row, column=2, sticky="w", pady=2)
                 self.motor_widgets.append(unit_lbl)
 
@@ -753,7 +753,7 @@ class ControlPanel(ttk.Frame):
         mm_entry.grid(row=row, column=1, sticky="w", padx=5, pady=1)
         self.motor_widgets.append(mm_entry)
         self.calculated_entries.append(mm_entry)
-        unit_lbl = ttk.Label(frame, text="kg", foreground="gray", width=6)
+        unit_lbl = ttk.Label(frame, text="kg", style="Unit.TLabel", width=6)
         unit_lbl.grid(row=row, column=2, sticky="w", pady=1)
         self.motor_widgets.append(unit_lbl)
         row += 1
@@ -769,7 +769,7 @@ class ControlPanel(ttk.Frame):
         pt_entry.grid(row=row, column=1, sticky="w", padx=5, pady=1)
         self.motor_widgets.append(pt_entry)
         self.calculated_entries.append(pt_entry)
-        unit_lbl = ttk.Label(frame, text="kg", foreground="gray", width=6)
+        unit_lbl = ttk.Label(frame, text="kg", style="Unit.TLabel", width=6)
         unit_lbl.grid(row=row, column=2, sticky="w", pady=1)
         self.motor_widgets.append(unit_lbl)
         row += 1
@@ -785,7 +785,7 @@ class ControlPanel(ttk.Frame):
         p_entry.grid(row=row, column=1, sticky="w", padx=5, pady=1)
         self.motor_widgets.append(p_entry)
         self.calculated_entries.append(p_entry)
-        unit_lbl = ttk.Label(frame, text="kW", foreground="gray", width=6)
+        unit_lbl = ttk.Label(frame, text="kW", style="Unit.TLabel", width=6)
         unit_lbl.grid(row=row, column=2, sticky="w", pady=1)
         self.motor_widgets.append(unit_lbl)
         row += 1
@@ -801,7 +801,7 @@ class ControlPanel(ttk.Frame):
         f_entry.grid(row=row, column=1, sticky="w", padx=5, pady=1)
         self.motor_widgets.append(f_entry)
         self.calculated_entries.append(f_entry)
-        unit_lbl = ttk.Label(frame, text="N", foreground="gray", width=6)
+        unit_lbl = ttk.Label(frame, text="N", style="Unit.TLabel", width=6)
         unit_lbl.grid(row=row, column=2, sticky="w", pady=1)
         self.motor_widgets.append(unit_lbl)
         row += 1
@@ -936,7 +936,7 @@ class ControlPanel(ttk.Frame):
             self.tv_widgets.append(entry)
 
             if unit:
-                unit_lbl = ttk.Label(frame, text=unit, foreground="gray", width=6)
+                unit_lbl = ttk.Label(frame, text=unit, style="Unit.TLabel", width=6)
                 unit_lbl.grid(row=param_row, column=2, sticky="w", pady=2)
                 self.tv_widgets.append(unit_lbl)
 
@@ -973,7 +973,7 @@ class ControlPanel(ttk.Frame):
         note_lbl = ttk.Label(
             frame,
             text="  Not available for FWD",
-            foreground="gray",
+            style="Unit.TLabel",
             font=("TkDefaultFont", 8, "italic"),
         )
         note_lbl.grid(
@@ -1192,7 +1192,7 @@ class ControlPanel(ttk.Frame):
             entry.grid(row=i, column=1, sticky="w", padx=5, pady=2)
 
             if unit:
-                unit_lbl = ttk.Label(frame, text=unit, foreground="gray", width=6)
+                unit_lbl = ttk.Label(frame, text=unit, style="Unit.TLabel", width=6)
                 unit_lbl.grid(row=i, column=2, sticky="w", pady=2)
 
             self.param_entries[section][key] = var
@@ -1241,7 +1241,7 @@ class ControlPanel(ttk.Frame):
             self.battery_widgets.append(entry)
 
             if unit:
-                unit_lbl = ttk.Label(frame, text=unit, foreground="gray", width=6)
+                unit_lbl = ttk.Label(frame, text=unit, style="Unit.TLabel", width=6)
                 unit_lbl.grid(row=i + 1, column=2, sticky="w", pady=2)
                 self.battery_widgets.append(unit_lbl)
 
@@ -1291,7 +1291,7 @@ class ControlPanel(ttk.Frame):
             self.regen_widgets.append(entry)
 
             if unit:
-                unit_lbl = ttk.Label(frame, text=unit, foreground="gray", width=6)
+                unit_lbl = ttk.Label(frame, text=unit, style="Unit.TLabel", width=6)
                 unit_lbl.grid(row=param_row, column=2, sticky="w", pady=2)
                 self.regen_widgets.append(unit_lbl)
 

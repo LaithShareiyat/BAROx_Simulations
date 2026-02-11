@@ -67,6 +67,15 @@ class PlotCanvas(ttk.Frame):
         except Exception:
             return
 
+        # Match pop-out background to current theme
+        try:
+            bg_hex = ttk.Style().lookup("TFrame", "background") or "#dcdad5"
+            r, g, b = int(bg_hex[1:3], 16), int(bg_hex[3:5], 16), int(bg_hex[5:7], 16)
+            if (r + g + b) / 3 < 128:  # Dark theme
+                fig_copy.patch.set_facecolor("#1c1c1c")
+        except Exception:
+            pass
+
         # If a specific subplot was clicked and figure has multiple axes,
         # extract just that subplot (plus its twins and colorbars)
         if self._selected_axes_idx is not None and len(self.figure.axes) > 1:
