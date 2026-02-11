@@ -5,6 +5,7 @@ from tkinter import ttk, messagebox
 import threading
 import os
 import sys
+from dataclasses import replace
 import numpy as np
 from PIL import Image, ImageTk
 
@@ -55,6 +56,63 @@ class BAROxGUI:
 
         # Invalid entry style
         style.configure("Invalid.TEntry", fieldbackground="#ffcccc")
+
+        # --- Results-card styles ---
+        style.configure(
+            "Headline.TLabel",
+            font=("Segoe UI", 28, "bold"),
+            foreground="#1a1a2e",
+        )
+        style.configure(
+            "HeadlineUnit.TLabel",
+            font=("Segoe UI", 14),
+            foreground="#555555",
+        )
+        style.configure(
+            "DataLabel.TLabel",
+            font=("Segoe UI", 13),
+            foreground="#444444",
+        )
+        style.configure(
+            "DataValue.TLabel",
+            font=("Segoe UI", 13, "bold"),
+            foreground="#1a1a2e",
+        )
+        style.configure(
+            "Pass.TLabel",
+            font=("Segoe UI", 16, "bold"),
+            foreground="#2e7d32",
+        )
+        style.configure(
+            "Fail.TLabel",
+            font=("Segoe UI", 16, "bold"),
+            foreground="#c62828",
+        )
+        style.configure(
+            "Warning.TLabel",
+            font=("Segoe UI", 12),
+            foreground="#e65100",
+        )
+        style.configure(
+            "TableHeader.TLabel",
+            font=("Segoe UI", 12, "bold"),
+            foreground="#333333",
+        )
+        style.configure(
+            "TableCell.TLabel",
+            font=("Segoe UI", 12),
+            foreground="#222222",
+        )
+        style.configure(
+            "CardTitle.TLabel",
+            font=("Segoe UI", 14, "bold"),
+            foreground="#1a1a2e",
+        )
+        style.configure(
+            "SectionTitle.TLabel",
+            font=("Segoe UI", 12, "bold"),
+            foreground="#37474f",
+        )
 
     def _create_logo_banner(self):
         """Create the logo banner at the top of the window."""
@@ -207,6 +265,16 @@ class BAROxGUI:
                 )
                 results["skidpad"] = self._run_skidpad(vehicle)
 
+            # Run parameter sweeps (autocross only)
+            if event_type in ("autocross", "both"):
+                self.root.after(
+                    0,
+                    lambda: self.results_panel.set_status(
+                        "Running parameter sweeps..."
+                    ),
+                )
+                results["sweeps"] = self._run_parameter_sweeps(vehicle, config)
+
             self.results = results
 
             # Update GUI in main thread
@@ -265,6 +333,10 @@ class BAROxGUI:
                 gear_ratio=pt_config["gear_ratio"],
                 wheel_radius_m=pt_config["wheel_radius_m"],
                 motor_efficiency=pt_config.get("motor_efficiency", 0.96),
+                powertrain_overhead_kg=pt_config.get("powertrain_overhead_kg", 10.0),
+                inverter_peak_power_kW=pt_config.get("inverter_peak_power_kW", 320.0),
+                inverter_peak_current_A=pt_config.get("inverter_peak_current_A", 600.0),
+                inverter_weight_kg=pt_config.get("inverter_weight_kg", 6.9),
             )
         else:
             # Legacy format with P_max_kW and Fx_max_N
@@ -351,6 +423,21 @@ class BAROxGUI:
         metrics["track"] = track
         metrics["v"] = v
         metrics["v_lat"] = result["v_lat"]
+        metrics["v_fwd"] = result["v_fwd"]
+        metrics["v_bwd"] = result["v_bwd"]
+        metrics["max_speed_analysis"] = self._analyse_max_speed(
+            track, v, result["v_fwd"], result["v_bwd"], result["v_lat"], vehicle
+        )
+
+        # Compute RPM profile if using extended powertrain
+        if hasattr(vehicle.powertrain, "gear_ratio"):
+            wheel_rpm = (v / (2 * np.pi * vehicle.powertrain.wheel_radius_m)) * 60
+            motor_rpm = wheel_rpm * vehicle.powertrain.gear_ratio
+            metrics["motor_rpm_profile"] = motor_rpm
+            metrics["motor_rpm_limit"] = vehicle.powertrain.motor_rpm_max
+
+        # Always include vehicle for power demand and sweep plots
+        metrics["vehicle"] = vehicle
 
         # Battery analysis
         if vehicle.battery is not None:
@@ -359,7 +446,6 @@ class BAROxGUI:
             metrics["battery_validation"] = battery_validation
             metrics["battery_sufficient"] = battery_validation.sufficient
             metrics["battery_state"] = battery_state
-            metrics["vehicle"] = vehicle
 
         return metrics
 
@@ -391,6 +477,16 @@ class BAROxGUI:
         metrics["v"] = v
         metrics["v_lat"] = result["v_lat"]
 
+        # Compute RPM profile if using extended powertrain
+        if hasattr(vehicle.powertrain, "gear_ratio"):
+            wheel_rpm = (v / (2 * np.pi * vehicle.powertrain.wheel_radius_m)) * 60
+            motor_rpm = wheel_rpm * vehicle.powertrain.gear_ratio
+            metrics["motor_rpm_profile"] = motor_rpm
+            metrics["motor_rpm_limit"] = vehicle.powertrain.motor_rpm_max
+
+        # Always include vehicle for power demand plots
+        metrics["vehicle"] = vehicle
+
         # Battery analysis (same as autocross)
         if vehicle.battery is not None:
             battery_validation = validate_battery_capacity(track, v, vehicle)
@@ -398,9 +494,48 @@ class BAROxGUI:
             metrics["battery_validation"] = battery_validation
             metrics["battery_sufficient"] = battery_validation.sufficient
             metrics["battery_state"] = battery_state
-            metrics["vehicle"] = vehicle
 
         return metrics
+
+    def _run_parameter_sweeps(self, vehicle, config: dict) -> dict:
+        """Run gear ratio sensitivity sweep on autocross.
+
+        Returns a dict with key 'gear_ratio_sweep'.
+        Value is a dict with 'values', 'lap_times', and 'current_value'.
+        """
+        from events.autocross_generator import build_standard_autocross
+        from solver.qss_speed import solve_qss
+
+        track, _ = build_standard_autocross()
+        n_points = 21
+        sweeps = {}
+
+        # --- Gear ratio sweep (only for extended powertrain) ---
+        if hasattr(vehicle.powertrain, "gear_ratio"):
+            current_gr = vehicle.powertrain.gear_ratio
+            gr_lo = max(1.0, current_gr * 0.5)
+            gr_hi = min(10.0, current_gr * 1.5)
+            gr_values = np.linspace(gr_lo, gr_hi, n_points)
+            gr_lap_times = np.full(n_points, np.nan)
+
+            for i, gr_val in enumerate(gr_values):
+                try:
+                    pt_mod = replace(vehicle.powertrain, gear_ratio=gr_val)
+                    v_mod = replace(vehicle, powertrain=pt_mod)
+                    _, t_lap = solve_qss(track, v_mod)
+                    gr_lap_times[i] = t_lap
+                except Exception:
+                    pass
+
+            sweeps["gear_ratio_sweep"] = {
+                "values": gr_values,
+                "lap_times": gr_lap_times,
+                "current_value": current_gr,
+            }
+        else:
+            sweeps["gear_ratio_sweep"] = None
+
+        return sweeps
 
     def _compute_metrics(self, track, v: np.ndarray, vehicle) -> dict:
         """Compute performance metrics from velocity profile."""
@@ -432,6 +567,92 @@ class BAROxGUI:
             "energy_consumed_kWh": energy_kwh,
         }
 
+    def _analyse_max_speed(self, track, v, v_fwd, v_bwd, v_lat, vehicle):
+        """Analyse max speed: when/where, how many times, and what limits it."""
+        from physics.powertrain import max_tractive_force_extended
+        from physics.aero import drag
+        from physics.resistive import rolling_resistance
+
+        max_speed = np.nanmax(v)
+
+        # Within 0.5% of max speed counts as "at max speed"
+        threshold = max_speed * 0.995
+
+        # Group consecutive points at max speed into distinct occurrences
+        at_max = v >= threshold
+        padded = np.concatenate([[False], at_max, [False]])
+        transitions = np.diff(padded.astype(int))
+        starts = np.where(transitions == 1)[0]
+        n_times = len(starts)
+
+        # Peak index (absolute maximum)
+        peak_idx = np.argmax(v)
+        peak_distance = track.s[peak_idx]
+
+        # Compute cumulative time up to peak
+        v_avg = 0.5 * (v[:-1] + v[1:])
+        dt = track.ds / np.maximum(v_avg, 0.1)
+        cum_time = np.concatenate([[0], np.cumsum(dt)])
+        peak_time = cum_time[peak_idx]
+
+        # Determine what limits the max speed
+        v_max_rpm = getattr(vehicle.powertrain, "v_max_rpm", 1000.0)
+
+        if abs(max_speed - v_max_rpm) / max(v_max_rpm, 0.1) < 0.02:
+            limiter = "RPM limit"
+            limiter_detail = (
+                f"Motor tops out at {v_max_rpm:.1f} m/s "
+                f"({v_max_rpm * 3.6:.0f} km/h)"
+            )
+        elif (
+            v_lat[peak_idx] <= v_fwd[peak_idx]
+            and v_lat[peak_idx] <= v_bwd[peak_idx]
+        ):
+            limiter = "Cornering grip"
+            limiter_detail = "Tyre grip limits speed through corner"
+        else:
+            F_motor = max_tractive_force_extended(vehicle.powertrain, max_speed)
+            F_drag_val = drag(vehicle.aero.rho, vehicle.aero.CD_A, max_speed)
+            F_rr = rolling_resistance(vehicle.Crr, vehicle.m, vehicle.g)
+            F_net = F_motor - F_drag_val - F_rr
+
+            if F_motor < 0.01:
+                limiter = "RPM limit"
+                limiter_detail = "Beyond motor RPM range"
+            elif F_net / max(F_motor, 1) < 0.10:
+                limiter = "Power limit (terminal velocity)"
+                limiter_detail = (
+                    f"Motor force ({F_motor:.0f} N) ~ "
+                    f"Drag + RR ({F_drag_val + F_rr:.0f} N)"
+                )
+            else:
+                limiter = "Track layout (braking for corner)"
+                limiter_detail = (
+                    f"Net force: {F_net:.0f} N available — "
+                    f"must brake for upcoming corner"
+                )
+
+        # Compute motor RPM at max speed
+        if hasattr(vehicle.powertrain, "gear_ratio"):
+            wheel_rpm = (max_speed / (2 * np.pi * vehicle.powertrain.wheel_radius_m)) * 60
+            motor_rpm = wheel_rpm * vehicle.powertrain.gear_ratio
+            motor_rpm_max = vehicle.powertrain.motor_rpm_max
+        else:
+            motor_rpm = None
+            motor_rpm_max = None
+
+        return {
+            "max_speed_mps": max_speed,
+            "max_speed_kmh": max_speed * 3.6,
+            "peak_distance_m": peak_distance,
+            "peak_time_s": peak_time,
+            "n_times": n_times,
+            "motor_rpm": motor_rpm,
+            "motor_rpm_max": motor_rpm_max,
+            "limiter": limiter,
+            "limiter_detail": limiter_detail,
+        }
+
     def _update_display(self, results: dict, event_type: str):
         """Update the display with simulation results."""
         # Update text results
@@ -447,8 +668,14 @@ class BAROxGUI:
         # Update speed track map (velocity coloured)
         self.results_panel.update_speed_track_plot(autocross_data, skidpad_data)
 
-        # Update speed profile (for both events)
-        self.results_panel.update_speed_profile_plot(autocross_data, skidpad_data)
+        # Update independent plot tabs
+        self.results_panel.update_speed_distance_plot(autocross_data, skidpad_data)
+        self.results_panel.update_rpm_distance_plot(autocross_data, skidpad_data)
+        self.results_panel.update_power_demand_plot(autocross_data, skidpad_data)
+
+        # Update sensitivity sweep plot
+        sweeps = results.get("sweeps", {})
+        self.results_panel.update_gear_ratio_sweep_plot(sweeps.get("gear_ratio_sweep"))
 
         # Update battery plot (for both events)
         self.results_panel.update_battery_combined_plot(autocross_data, skidpad_data)
@@ -517,7 +744,10 @@ class BAROxGUI:
             plot_configs = [
                 (self.results_panel.layout_canvas, "track_layout.png"),
                 (self.results_panel.track_canvas, "speed_track_map.png"),
-                (self.results_panel.speed_canvas, "speed_profile.png"),
+                (self.results_panel.speed_distance_canvas, "speed_vs_distance.png"),
+                (self.results_panel.rpm_distance_canvas, "rpm_vs_distance.png"),
+                (self.results_panel.power_demand_canvas, "power_demand.png"),
+                (self.results_panel.gear_ratio_sweep_canvas, "gear_ratio_sweep.png"),
                 (self.results_panel.battery_canvas, "battery_analysis.png"),
             ]
 
@@ -595,7 +825,9 @@ class BAROxGUI:
                 n_motors = 1
             else:
                 n_motors = 2
-            total_power = pt["motor_power_kW"] * n_motors
+            motor_power_total = pt["motor_power_kW"] * n_motors
+            rules_cap = pt.get("P_max_rules_kW", 80.0)
+            total_power = min(motor_power_total, rules_cap)
             fx_max = (pt["motor_torque_Nm"] * n_motors * pt["gear_ratio"]) / pt[
                 "wheel_radius_m"
             ]
@@ -609,7 +841,12 @@ class BAROxGUI:
             lines.append(f"Motor Efficiency: {motor_eff * 100:.0f}%")
             lines.append(f"Gear Ratio: {pt['gear_ratio']}:1")
             lines.append(f"Wheel Radius: {pt['wheel_radius_m']} m")
-            lines.append(f"Total Power: {total_power:.0f} kW")
+            inv_weight = pt.get("inverter_weight_kg", 6.9)
+            lines.append(
+                f"Inverter: {pt.get('inverter_name', 'DTI HV-850')} "
+                f"({n_motors}x, {inv_weight:.1f} kg each)"
+            )
+            lines.append(f"Total Power: {total_power:.0f} kW (FS cap: {rules_cap:.0f} kW)")
             lines.append(f"Max Tractive Force: {fx_max:.0f} N")
             lines.append(
                 f"Max Speed (RPM limit): {v_max:.1f} m/s ({v_max * 3.6:.0f} km/h)"

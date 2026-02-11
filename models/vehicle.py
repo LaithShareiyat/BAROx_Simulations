@@ -105,7 +105,9 @@ class EVPowertrainParams:
     - 'AWD': All-wheel drive (4 motors, 2 front + 2 rear)
 
     Weight calculation:
-        total_powertrain_mass = (motor_weight_kg × n_motors) + powertrain_overhead_kg
+        total_powertrain_mass = (motor_weight × n_motors)
+                              + (inverter_weight × n_inverters)
+                              + powertrain_overhead_kg
         Note: For single motor configs, powertrain_overhead should include differential mass
     """
 
@@ -121,8 +123,15 @@ class EVPowertrainParams:
     motor_weight_kg: float = 9.4  # Weight per motor [kg] (EMRAX 208)
     motor_constant_Nm_A: float = 0.62  # Torque constant Km [Nm/A] (EMRAX 208)
     peak_current_A: float = 240.0  # Peak motor current [A] (EMRAX 208)
-    # Powertrain overhead (inverters, wiring, cooling, mounts, differential for 1-motor)
-    powertrain_overhead_kg: float = 25.0  # Additional powertrain mass [kg]
+    # Powertrain overhead (wiring, cooling, mounts, differential for 1-motor)
+    powertrain_overhead_kg: float = 10.0  # Additional powertrain mass [kg]
+    # Inverter parameters (one inverter per motor)
+    inverter_name: str = "DTI HV-850"  # Inverter model
+    inverter_peak_power_kW: float = 320.0  # Peak output power per inverter [kW]
+    inverter_peak_current_A: float = 600.0  # Peak output current per inverter [A]
+    inverter_weight_kg: float = 6.9  # Weight per inverter [kg]
+    # FS rules power cap (total powertrain power cannot exceed this)
+    P_max_rules_kW: float = 80.0  # [kW] FS rules maximum total power
 
     @property
     def n_motors(self) -> int:
@@ -155,19 +164,42 @@ class EVPowertrainParams:
         return self.n_motors >= 2
 
     @property
+    def n_inverters(self) -> int:
+        """Number of inverters (one per motor)."""
+        return self.n_motors
+
+    @property
+    def P_max_motor(self) -> float:
+        """Combined motor capability [W] (uncapped by rules)."""
+        motor_total = self.motor_power_kW * 1000 * self.n_motors
+        inverter_total = self.inverter_peak_power_kW * 1000 * self.n_inverters
+        return min(motor_total, inverter_total)
+
+    @property
     def P_max(self) -> float:
-        """Total maximum power [W]."""
-        return self.motor_power_kW * 1000 * self.n_motors
+        """Total maximum power [W], capped by FS rules limit."""
+        return min(self.P_max_motor, self.P_max_rules_kW * 1000)
+
+    @property
+    def effective_motor_torque_Nm(self) -> float:
+        """Effective peak torque per motor, considering inverter current limit [Nm].
+
+        If the inverter cannot deliver the current the motor demands at
+        peak torque, the inverter becomes the bottleneck.
+        """
+        inverter_limited_torque = self.motor_constant_Nm_A * self.inverter_peak_current_A
+        return min(self.motor_torque_Nm, inverter_limited_torque)
 
     @property
     def Fx_max(self) -> float:
         """Maximum tractive force at low speed [N].
 
-        Calculated from motor torque, number of motors, gear ratio, and wheel radius.
-        Fx = (torque × n_motors × gear_ratio) / wheel_radius
+        Calculated from effective motor torque (may be inverter-current-limited),
+        number of motors, gear ratio, and wheel radius.
+        Fx = (effective_torque × n_motors × gear_ratio) / wheel_radius
         """
         return (
-            self.motor_torque_Nm * self.n_motors * self.gear_ratio
+            self.effective_motor_torque_Nm * self.n_motors * self.gear_ratio
         ) / self.wheel_radius_m
 
     @property
@@ -191,12 +223,22 @@ class EVPowertrainParams:
         return self.motor_weight_kg * self.n_motors
 
     @property
-    def total_powertrain_mass_kg(self) -> float:
-        """Total powertrain mass including motors and overhead [kg].
+    def total_inverter_mass_kg(self) -> float:
+        """Total mass of all inverters [kg]."""
+        return self.inverter_weight_kg * self.n_inverters
 
-        total = (motor_weight × n_motors) + powertrain_overhead
+    @property
+    def total_powertrain_mass_kg(self) -> float:
+        """Total powertrain mass including motors, inverters, and overhead [kg].
+
+        total = (motor_weight × n_motors) + (inverter_weight × n_inverters)
+              + powertrain_overhead
         """
-        return self.total_motor_mass_kg + self.powertrain_overhead_kg
+        return (
+            self.total_motor_mass_kg
+            + self.total_inverter_mass_kg
+            + self.powertrain_overhead_kg
+        )
 
 
 @dataclass(frozen=True)

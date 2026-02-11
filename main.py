@@ -147,7 +147,10 @@ def create_vehicle_from_config(config: dict) -> VehicleParams:
             motor_weight_kg=motor_weight_kg,
             motor_constant_Nm_A=motor_constant,
             peak_current_A=peak_current,
-            powertrain_overhead_kg=pt_config.get("powertrain_overhead_kg", 25.0),
+            powertrain_overhead_kg=pt_config.get("powertrain_overhead_kg", 10.0),
+            inverter_peak_power_kW=pt_config.get("inverter_peak_power_kW", 320.0),
+            inverter_peak_current_A=pt_config.get("inverter_peak_current_A", 600.0),
+            inverter_weight_kg=pt_config.get("inverter_weight_kg", 6.9),
         )
     else:
         # Legacy format with P_max_kW and Fx_max_N
@@ -340,7 +343,7 @@ def get_custom_vehicle_params(defaults: dict) -> dict:
             "motor_power_kW": 40,  # 40 kW per motor (FS 80 kW total limit)
             "motor_torque_Nm": 150,  # EMRAX 208
             "motor_rpm_max": 7000,  # EMRAX 208
-            "gear_ratio": 3.5,
+            "gear_ratio": 3.0,
             "wheel_radius_m": 0.203,
         },
     )
@@ -375,7 +378,7 @@ def get_custom_vehicle_params(defaults: dict) -> dict:
     questions = [
         inquirer.Text(
             "gear_ratio",
-            message=f"Gear ratio (motor:wheel) ({pt_defaults.get('gear_ratio', 3.5)})",
+            message=f"Gear ratio (motor:wheel) ({pt_defaults.get('gear_ratio', 3.0)})",
             default=str(pt_defaults.get("gear_ratio", 3.5)),
         ),
         inquirer.Text(
@@ -601,7 +604,9 @@ def print_vehicle_params(config: dict):
             n_motors = 1
         else:
             n_motors = 2
-        total_power = pt["motor_power_kW"] * n_motors
+        motor_power_total = pt["motor_power_kW"] * n_motors
+        rules_cap = pt.get("P_max_rules_kW", 80.0)
+        total_power = min(motor_power_total, rules_cap)
         fx_max = (pt["motor_torque_Nm"] * n_motors * pt["gear_ratio"]) / pt[
             "wheel_radius_m"
         ]
@@ -615,8 +620,10 @@ def print_vehicle_params(config: dict):
         print(f"    Motor efficiency:  {pt.get('motor_efficiency', 0.85):.0%}")
         print(f"    Gear ratio:        {pt['gear_ratio']}:1")
         print(f"    Wheel radius:      {pt['wheel_radius_m']} m")
+        inv_weight = pt.get('inverter_weight_kg', 6.9)
+        print(f"    Inverter:          {pt.get('inverter_name', 'DTI HV-850')} ({n_motors}x, {inv_weight:.1f} kg each)")
         print(f"    --- Calculated ---")
-        print(f"    Total power:       {total_power:.0f} kW")
+        print(f"    Total power:       {total_power:.0f} kW (FS cap: {rules_cap:.0f} kW)")
         print(f"    Max force:         {fx_max:.0f} N")
         print(f"    Max speed (RPM):   {v_max:.1f} m/s ({v_max * 3.6:.0f} km/h)")
     else:

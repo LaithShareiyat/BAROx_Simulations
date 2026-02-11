@@ -227,12 +227,15 @@ def solve_qss(track: Track, vehicle: VehicleParams,
                 amax = amax * tv_traction_mult
             ax_grip = ax_available(amax, ay)
 
-        # Maximum power-limited acceleration (uses extended function for RPM limit)
+        # Maximum tractive force from powertrain (torque/power/RPM limited)
         Fx_motor = max_tractive_force_extended(vehicle.powertrain, v_i)
-        ax_power = (Fx_motor - Fdrag - Frr) / m
 
-        # Take minimum (most limiting)
-        ax = min(ax_grip, ax_power)
+        # Compare at force level: grip and powertrain both limit tyre force
+        Fx_grip = ax_grip * m
+        Fx = min(Fx_grip, Fx_motor)
+
+        # Net acceleration after subtracting resistive forces
+        ax = (Fx - Fdrag - Frr) / m
         ax = max(ax, 0)  # Can't accelerate backwards
 
         # Kinematic equation: v² = v₀² + 2*a*ds
@@ -269,30 +272,36 @@ def solve_qss(track: Track, vehicle: VehicleParams,
         v_bwd[-1] = v_fwd[-1]
     
     for i in range(n - 2, -1, -1):
-        v_i = v_bwd[i + 1]
+        v_exit = v_bwd[i + 1]
         ds = track.ds[i]
-        
-        # Braking forces (drag helps slow down)
-        Fdown = downforce(vehicle.aero.rho, vehicle.aero.CL_A, v_i)
-        Fdrag = drag(vehicle.aero.rho, vehicle.aero.CD_A, v_i)
         Frr = rolling_resistance(vehicle.Crr, m, g)
-        
-        # Maximum grip-limited deceleration
-        ay = v_i**2 * abs(track.kappa[i + 1])
-        if use_bicycle and vehicle.has_extended_powertrain:
-            ax_grip = ax_braking_axle_aware(
-                mu, vehicle, v_i, abs(track.kappa[i + 1]), Fdown
-            )
-        else:
-            amax = a_max(mu, g, m, Fdown)
-            ax_grip = ax_available(amax, ay)
-        
-        # Deceleration (braking adds to drag/rr)
-        ax_brake = ax_grip + (Fdrag + Frr) / m
-        
-        # Kinematic equation (going backwards)
-        v_prev_sq = v_i**2 + 2 * ax_brake * ds
-        v_bwd[i] = min(np.sqrt(max(v_prev_sq, 0)), v_lat[i])
+        kappa_entry = abs(track.kappa[i])
+
+        # Predictor-corrector: first estimate uses exit speed, then
+        # re-evaluate at the higher entry speed for a better result.
+        v_est = v_exit  # initial estimate for force evaluation
+        for _ in range(2):
+            Fdown = downforce(vehicle.aero.rho, vehicle.aero.CL_A, v_est)
+            Fdrag = drag(vehicle.aero.rho, vehicle.aero.CD_A, v_est)
+
+            # Maximum grip-limited deceleration
+            ay = v_est**2 * kappa_entry
+            if use_bicycle and vehicle.has_extended_powertrain:
+                ax_grip = ax_braking_axle_aware(
+                    mu, vehicle, v_est, kappa_entry, Fdown
+                )
+            else:
+                amax_val = a_max(mu, g, m, Fdown)
+                ax_grip = ax_available(amax_val, ay)
+
+            # Deceleration (braking adds to drag/rr)
+            ax_brake = ax_grip + (Fdrag + Frr) / m
+
+            # Kinematic equation (going backwards)
+            v_prev_sq = v_exit**2 + 2 * ax_brake * ds
+            v_est = min(np.sqrt(max(v_prev_sq, 0)), v_lat[i])
+
+        v_bwd[i] = v_est
     
     # =========================================
     # STEP 4: Combine all limits

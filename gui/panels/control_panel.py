@@ -136,7 +136,7 @@ class ControlPanel(ttk.Frame):
                 "mass_chassis_kg": 55,
                 "mass_aero_kg": 20,
                 "mass_suspension_tyres_kg": 50,
-                "mass_powertrain_kg": 44,  # 2× EMRAX 208 (9.4kg) + 25kg overhead
+                "mass_powertrain_kg": 42.6,  # 2× EMRAX 208 (9.4kg) + 2× DTI HV-850 (6.9kg) + 10kg overhead
                 "mass_battery_kg": 45,  # 142S5P pack
                 "mass_electronics_kg": 25,
             },
@@ -150,9 +150,12 @@ class ControlPanel(ttk.Frame):
                 "motor_rpm_max": 7000,  # EMRAX 208
                 "motor_efficiency": 0.96,  # EMRAX 208
                 "motor_weight_kg": 9.4,  # EMRAX 208 weight [kg]
-                "gear_ratio": 3.5,
+                "gear_ratio": 3.0,
                 "wheel_radius_m": 0.203,
-                "powertrain_overhead_kg": 25.0,  # Inverters, wiring, cooling [kg]
+                "powertrain_overhead_kg": 10.0,  # Wiring, cooling, mounts [kg]
+                "inverter_peak_power_kW": 320.0,  # DTI HV-850
+                "inverter_peak_current_A": 600.0,  # DTI HV-850
+                "inverter_weight_kg": 6.9,  # DTI HV-850
             },
             "battery": {
                 "capacity_kWh": 6.65,
@@ -450,6 +453,7 @@ class ControlPanel(ttk.Frame):
         motor_label.grid(row=row, column=0, sticky="w", padx=5, pady=2)
 
         motor_list = self._get_motor_list()
+        motor_list.append(("Custom", "custom"))
         motor_names = [name for name, _ in motor_list]
         self.motor_id_map = {name: motor_id for name, motor_id in motor_list}
 
@@ -469,10 +473,10 @@ class ControlPanel(ttk.Frame):
             textvariable=self.motor_var,
             values=motor_names,
             state="readonly",
-            width=25,
+            width=10,
         )
         self.motor_combo.grid(
-            row=row, column=1, columnspan=2, sticky="w", padx=5, pady=2
+            row=row, column=1, sticky="w", padx=5, pady=2
         )
         self.motor_combo.bind("<<ComboboxSelected>>", self._on_motor_change)
         self.motor_widgets = [motor_label, self.motor_combo]
@@ -507,7 +511,7 @@ class ControlPanel(ttk.Frame):
         # Description label
         self.drivetrain_desc_var = tk.StringVar(value="")
         dt_desc = ttk.Label(
-            frame, textvariable=self.drivetrain_desc_var, foreground="gray", width=20
+            frame, textvariable=self.drivetrain_desc_var, foreground="gray"
         )
         dt_desc.grid(row=row, column=2, sticky="w", pady=2)
         self.motor_widgets.append(dt_desc)
@@ -531,7 +535,7 @@ class ControlPanel(ttk.Frame):
         self.motor_widgets.append(motor_weight_entry)
         self.motor_spec_entries_weight = motor_weight_entry  # Track for state updates
 
-        unit_lbl = ttk.Label(frame, text="kg/motor", foreground="gray", width=8)
+        unit_lbl = ttk.Label(frame, text="kg/motor", foreground="gray", width=7)
         unit_lbl.grid(row=row, column=2, sticky="w", pady=2)
         self.motor_widgets.append(unit_lbl)
 
@@ -553,7 +557,7 @@ class ControlPanel(ttk.Frame):
         self.motor_widgets.append(overhead_entry)
         self.overhead_entry = overhead_entry  # Track for state updates
 
-        unit_lbl = ttk.Label(frame, text="kg", foreground="gray", width=8)
+        unit_lbl = ttk.Label(frame, text="kg", foreground="gray", width=6)
         unit_lbl.grid(row=row, column=2, sticky="w", pady=2)
         self.motor_widgets.append(unit_lbl)
 
@@ -570,7 +574,7 @@ class ControlPanel(ttk.Frame):
         self.diff_entry.grid(row=row, column=1, sticky="w", padx=5, pady=2)
         self.diff_entry.bind("<KeyRelease>", self._update_powertrain_display)
 
-        self.diff_unit_lbl = ttk.Label(frame, text="kg", foreground="gray", width=8)
+        self.diff_unit_lbl = ttk.Label(frame, text="kg", foreground="gray", width=6)
         self.diff_unit_lbl.grid(row=row, column=2, sticky="w", pady=2)
 
         # Store references for show/hide
@@ -580,6 +584,54 @@ class ControlPanel(ttk.Frame):
 
         # Initially hide differential field (shown when 1-motor selected)
         self._update_differential_visibility()
+
+        # Inverter section header
+        inv_header = ttk.Label(
+            frame,
+            text="Inverter:",
+            width=16,
+            anchor="w",
+            font=("TkDefaultFont", 9, "italic"),
+        )
+        inv_header.grid(row=row, column=0, sticky="w", padx=5, pady=2)
+        self.motor_widgets.append(inv_header)
+        row += 1
+
+        # Inverter parameters (DTI HV-850 defaults as fallback)
+        inverter_fallbacks = {
+            "inverter_peak_power_kW": 320.0,
+            "inverter_peak_current_A": 600.0,
+            "inverter_weight_kg": 6.9,
+        }
+        inverter_params = [
+            ("inverter_peak_power_kW", "Peak Power", "kW"),
+            ("inverter_peak_current_A", "Peak Current", "A"),
+            ("inverter_weight_kg", "Weight", "kg/unit"),
+        ]
+
+        self.inverter_entries = []  # Track for state management
+        for key, label, unit in inverter_params:
+            default_val = defaults.get(key, inverter_fallbacks[key])
+
+            lbl = ttk.Label(frame, text=label, width=16, anchor="w")
+            lbl.grid(row=row, column=0, sticky="w", padx=5, pady=2)
+            self.motor_widgets.append(lbl)
+
+            var = tk.StringVar(value=str(default_val))
+            entry = ttk.Entry(frame, textvariable=var, width=10)
+            entry.grid(row=row, column=1, sticky="w", padx=5, pady=2)
+            entry.bind("<KeyRelease>", self._update_powertrain_display)
+            self.motor_widgets.append(entry)
+            self.inverter_entries.append(entry)
+
+            if unit:
+                unit_lbl = ttk.Label(frame, text=unit, foreground="gray", width=6)
+                unit_lbl.grid(row=row, column=2, sticky="w", pady=2)
+                self.motor_widgets.append(unit_lbl)
+
+            self.param_entries["powertrain"][key] = var
+            self.param_widgets["powertrain"][key] = entry
+            row += 1
 
         # Separator before motor specs
         sep1 = ttk.Separator(frame, orient="horizontal")
@@ -665,6 +717,7 @@ class ControlPanel(ttk.Frame):
         row += 1
 
         # Calculated values display (read-only)
+        self.calculated_entries = []  # Track for greying out in standard mode
         calc_label = ttk.Label(
             frame,
             text="Calculated:",
@@ -686,6 +739,7 @@ class ControlPanel(ttk.Frame):
         )
         n_entry.grid(row=row, column=1, sticky="w", padx=5, pady=1)
         self.motor_widgets.append(n_entry)
+        self.calculated_entries.append(n_entry)
         row += 1
 
         # Motor mass display
@@ -698,6 +752,7 @@ class ControlPanel(ttk.Frame):
         )
         mm_entry.grid(row=row, column=1, sticky="w", padx=5, pady=1)
         self.motor_widgets.append(mm_entry)
+        self.calculated_entries.append(mm_entry)
         unit_lbl = ttk.Label(frame, text="kg", foreground="gray", width=6)
         unit_lbl.grid(row=row, column=2, sticky="w", pady=1)
         self.motor_widgets.append(unit_lbl)
@@ -713,6 +768,7 @@ class ControlPanel(ttk.Frame):
         )
         pt_entry.grid(row=row, column=1, sticky="w", padx=5, pady=1)
         self.motor_widgets.append(pt_entry)
+        self.calculated_entries.append(pt_entry)
         unit_lbl = ttk.Label(frame, text="kg", foreground="gray", width=6)
         unit_lbl.grid(row=row, column=2, sticky="w", pady=1)
         self.motor_widgets.append(unit_lbl)
@@ -728,6 +784,7 @@ class ControlPanel(ttk.Frame):
         )
         p_entry.grid(row=row, column=1, sticky="w", padx=5, pady=1)
         self.motor_widgets.append(p_entry)
+        self.calculated_entries.append(p_entry)
         unit_lbl = ttk.Label(frame, text="kW", foreground="gray", width=6)
         unit_lbl.grid(row=row, column=2, sticky="w", pady=1)
         self.motor_widgets.append(unit_lbl)
@@ -743,6 +800,7 @@ class ControlPanel(ttk.Frame):
         )
         f_entry.grid(row=row, column=1, sticky="w", padx=5, pady=1)
         self.motor_widgets.append(f_entry)
+        self.calculated_entries.append(f_entry)
         unit_lbl = ttk.Label(frame, text="N", foreground="gray", width=6)
         unit_lbl.grid(row=row, column=2, sticky="w", pady=1)
         self.motor_widgets.append(unit_lbl)
@@ -758,6 +816,7 @@ class ControlPanel(ttk.Frame):
         )
         s_entry.grid(row=row, column=1, columnspan=2, sticky="w", padx=5, pady=1)
         self.motor_widgets.append(s_entry)
+        self.calculated_entries.append(s_entry)
 
         # Initialise display
         self._on_motor_change()
@@ -767,6 +826,19 @@ class ControlPanel(ttk.Frame):
         """Handle motor selection change - update specs from database."""
         motor_name = self.motor_var.get()
         motor_id = self.motor_id_map.get(motor_name)
+
+        if motor_id == "custom":
+            # Make spec fields editable for custom motor
+            for entry in self.motor_spec_entries:
+                entry.configure(state="normal")
+            if hasattr(self, "motor_spec_entries_weight"):
+                self.motor_spec_entries_weight.configure(state="normal")
+            # Allow all drivetrains for custom motor
+            if hasattr(self, "drivetrain_combo"):
+                all_drivetrains = ["1FWD", "1RWD", "2FWD", "2RWD", "AWD"]
+                self.drivetrain_combo.configure(values=all_drivetrains)
+            self._update_powertrain_display()
+            return
 
         if motor_id and motor_id in self.motor_database:
             motor = self.motor_database[motor_id]
@@ -791,6 +863,12 @@ class ControlPanel(ttk.Frame):
                 self.param_entries["powertrain"]["motor_weight_kg"].set(
                     str(motor.get("weight_kg", 10.0))
                 )
+
+            # Set spec fields back to read-only for database motors
+            for entry in self.motor_spec_entries:
+                entry.configure(state="readonly")
+            if hasattr(self, "motor_spec_entries_weight"):
+                self.motor_spec_entries_weight.configure(state="readonly")
 
             # Update allowed drivetrains based on motor
             self._update_allowed_drivetrains(motor)
@@ -1035,11 +1113,37 @@ class ControlPanel(ttk.Frame):
                 except ValueError:
                     diff_mass = 0.0
 
-            pt_mass_total = motor_mass_total + overhead + diff_mass
+            # Inverter mass
+            inverter_weight = 0.0
+            if "inverter_weight_kg" in self.param_entries["powertrain"]:
+                try:
+                    inverter_weight = float(
+                        self.param_entries["powertrain"]["inverter_weight_kg"].get()
+                    )
+                except ValueError:
+                    inverter_weight = 0.0
+            inverter_mass_total = inverter_weight * n_motors
+
+            pt_mass_total = motor_mass_total + inverter_mass_total + overhead + diff_mass
 
             total_power = motor_power * n_motors
+
+            # Effective torque considering inverter current limit
+            motor_constant = 0.62  # default
+            inv_current = 600.0  # default
+            try:
+                motor_constant = float(
+                    self.param_entries["powertrain"].get("motor_constant_Nm_A", tk.StringVar(value="0.62")).get()
+                )
+                inv_current = float(
+                    self.param_entries["powertrain"].get("inverter_peak_current_A", tk.StringVar(value="600")).get()
+                )
+            except (ValueError, AttributeError):
+                pass
+            effective_torque = min(motor_torque, motor_constant * inv_current)
+
             fx_max = (
-                (motor_torque * n_motors * gear_ratio) / wheel_radius
+                (effective_torque * n_motors * gear_ratio) / wheel_radius
                 if wheel_radius > 0
                 else 0
             )
@@ -1099,7 +1203,7 @@ class ControlPanel(ttk.Frame):
         frame = ttk.LabelFrame(self.scrollable_frame, text="BATTERY", padding=(10, 5))
         frame.pack(fill="x", padx=10, pady=5)
 
-        self.battery_enabled = tk.BooleanVar(value=True)
+        self.battery_enabled = tk.BooleanVar(value=False)
         self.battery_checkbox = ttk.Checkbutton(
             frame,
             text="Enable Battery Analysis",
@@ -1291,7 +1395,7 @@ class ControlPanel(ttk.Frame):
                 # Skip mass breakdown entries in standard mode (they're hidden)
                 if not is_custom and key.startswith("mass_") and key != "mass_kg":
                     continue
-                # Motor specs are always readonly (come from database)
+                # Motor specs: editable only for custom motor, else readonly/disabled
                 if key in (
                     "motor_power_kW",
                     "motor_torque_Nm",
@@ -1299,22 +1403,46 @@ class ControlPanel(ttk.Frame):
                     "motor_efficiency",
                     "motor_weight_kg",
                 ):
-                    entry.configure(state="readonly")
+                    is_custom_motor = (
+                        self.motor_id_map.get(self.motor_var.get()) == "custom"
+                    )
+                    if is_custom and is_custom_motor:
+                        entry.configure(state="normal")
+                    else:
+                        entry.configure(
+                            state="readonly" if is_custom else "disabled"
+                        )
                 else:
                     entry.configure(state=state)
 
-        # Update motor dropdown - disabled in standard mode
+        # Grey out calculated display entries in standard mode
+        if hasattr(self, "calculated_entries"):
+            calc_state = "readonly" if is_custom else "disabled"
+            for entry in self.calculated_entries:
+                entry.configure(state=calc_state)
+
+        # Update motor dropdown — disabled in standard mode
         if hasattr(self, "motor_combo"):
             self.motor_combo.configure(state="readonly" if is_custom else "disabled")
 
-        # Update drivetrain radio buttons
-        if hasattr(self, "drivetrain_widgets"):
-            for rb in self.drivetrain_widgets:
-                rb.configure(state=state)
+        # Update drivetrain dropdown — disabled in standard mode
+        if hasattr(self, "drivetrain_combo"):
+            self.drivetrain_combo.configure(
+                state="readonly" if is_custom else "disabled"
+            )
+
+        # Update differential entry — disabled in standard mode
+        if hasattr(self, "diff_entry"):
+            self.diff_entry.configure(state=state)
 
         # Update powertrain overhead entry
         if hasattr(self, "overhead_entry"):
             self.overhead_entry.configure(state=state)
+
+        # Update inverter entries
+        if hasattr(self, "inverter_entries"):
+            for entry in self.inverter_entries:
+                entry.configure(state=state)
 
         # Update battery widgets (entries only)
         for widget in self.battery_widgets:
@@ -1458,7 +1586,7 @@ class ControlPanel(ttk.Frame):
 
         # Handle battery enabled state
         if "battery" in config:
-            self.battery_enabled.set(config["battery"].get("enabled", True))
+            self.battery_enabled.set(config["battery"].get("enabled", False))
             # Handle regen enabled state
             if hasattr(self, "regen_enabled"):
                 self.regen_enabled.set(config["battery"].get("regen_enabled", False))
