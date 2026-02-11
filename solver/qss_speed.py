@@ -15,7 +15,7 @@ import numpy as np
 from models.track import Track
 from models.vehicle import VehicleParams
 from physics.aero import drag, downforce
-from physics.tyre import a_max, ax_available, ax_traction_axle_aware, ax_braking_axle_aware
+from physics.tyre import a_max, ax_available, ax_traction_axle_aware, ax_braking_axle_aware, a_max_from_tyre
 from physics.powertrain import max_tractive_force, max_tractive_force_extended
 from physics.resistive import rolling_resistance
 from physics.bicycle_model import solve_qss_bicycle, calculate_max_lateral_accel
@@ -125,7 +125,7 @@ def solve_qss(track: Track, vehicle: VehicleParams,
         # Iterate because downforce depends on speed
         for _ in range(10):
             Fdown = downforce(vehicle.aero.rho, vehicle.aero.CL_A, v_guess)
-            amax = a_max(mu, g, m, Fdown)
+            amax = a_max_from_tyre(vehicle.tyre, g, m, Fdown)
 
             # Apply torque vectoring lateral benefit if enabled
             if has_tv and kappa_i > 1e-6:
@@ -191,7 +191,7 @@ def solve_qss(track: Track, vehicle: VehicleParams,
         Fdown = downforce(vehicle.aero.rho, vehicle.aero.CL_A, v_for_aero)
         Fdrag = drag(vehicle.aero.rho, vehicle.aero.CD_A, v_for_aero)
         Frr = rolling_resistance(vehicle.Crr, m, g)
-        amax = a_max(mu, g, m, Fdown)
+        amax = a_max_from_tyre(vehicle.tyre, g, m, Fdown)
         # Assume we use full grip for braking (no lateral accel during pure braking)
         ax_brake = amax + (Fdrag + Frr) / m
         # v_entry² = v_exit² + 2 * a_brake * ds
@@ -221,7 +221,7 @@ def solve_qss(track: Track, vehicle: VehicleParams,
             )
         else:
             # Fallback: original point-mass friction circle
-            amax = a_max(mu, g, m, Fdown)
+            amax = a_max_from_tyre(vehicle.tyre, g, m, Fdown)
             if has_tv and ay > 0.1:
                 tv_traction_mult = calculate_tv_traction_benefit(vehicle, ay, a_x=1.0)
                 amax = amax * tv_traction_mult
@@ -291,7 +291,7 @@ def solve_qss(track: Track, vehicle: VehicleParams,
                     mu, vehicle, v_est, kappa_entry, Fdown
                 )
             else:
-                amax_val = a_max(mu, g, m, Fdown)
+                amax_val = a_max_from_tyre(vehicle.tyre, g, m, Fdown)
                 ax_grip = ax_available(amax_val, ay)
 
             # Deceleration (braking adds to drag/rr)

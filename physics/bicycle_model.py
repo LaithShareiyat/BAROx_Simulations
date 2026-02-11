@@ -44,6 +44,7 @@ from dataclasses import dataclass
 from typing import Optional
 from models.vehicle import VehicleParams
 from physics.weight_transfer import calculate_axle_loads
+from physics.tyre import max_lateral_force
 
 
 @dataclass
@@ -103,7 +104,6 @@ def solve_qss_bicycle(vehicle: VehicleParams,
     # Get vehicle parameters
     m = vehicle.m
     g = vehicle.g
-    mu = vehicle.mu
 
     # Get geometry
     if vehicle.geometry is not None:
@@ -156,10 +156,9 @@ def solve_qss_bicycle(vehicle: VehicleParams,
     delta = alpha_f + beta + (L_f * r) / V_safe
 
     # Calculate grip utilisation
-    # Maximum lateral force limited by friction circle
-    # For combined slip, reserve some grip for longitudinal force
-    F_yf_max = mu * F_zf
-    F_yr_max = mu * F_zr
+    # Maximum lateral force limited by friction circle (or Pacejka peak)
+    F_yf_max = max_lateral_force(vehicle.tyre, F_zf, n_tyres=2)
+    F_yr_max = max_lateral_force(vehicle.tyre, F_zr, n_tyres=2)
 
     grip_front = abs(F_yf) / F_yf_max if F_yf_max > 0 else 0.0
     grip_rear = abs(F_yr) / F_yr_max if F_yr_max > 0 else 0.0
@@ -208,11 +207,11 @@ def calculate_max_lateral_accel(vehicle: VehicleParams,
     Returns:
         Maximum lateral acceleration [m/s²]
     """
-    mu = vehicle.mu
     g = vehicle.g
 
     # Upper bound: simple friction limit
-    a_y_max_simple = mu * g
+    Fz_static = vehicle.m * g
+    a_y_max_simple = max_lateral_force(vehicle.tyre, Fz_static, n_tyres=4) / vehicle.m
 
     # Binary search for actual limit considering weight transfer
     a_y_low = 0.0

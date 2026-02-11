@@ -28,11 +28,18 @@ def _summarise_config(config: dict) -> dict:
     # Motor name from the config (if present)
     motor = pt.get("motor", "—")
 
+    tyre_model = t.get("model", "simple")
+    mu_display = t.get("mu", "—")
+    if tyre_model == "pacejka":
+        pac = t.get("pacejka", {})
+        mu_display = pac.get("mu_peak", mu_display)
+
     return {
         "mass_kg": v.get("mass_kg", "—"),
         "Cl": a.get("Cl", "—"),
         "Cd": a.get("Cd", "—"),
-        "mu": t.get("mu", "—"),
+        "mu": mu_display,
+        "tyre_model": tyre_model.capitalize(),
         "gear_ratio": pt.get("gear_ratio", "—"),
         "drivetrain": drivetrain,
         "motor": motor,
@@ -82,7 +89,7 @@ class ConfigComparisonPanel(ttk.Frame):
         )
         list_frame.pack(fill="x", padx=8, pady=(8, 4))
 
-        columns = ("name", "mass", "Cl", "Cd", "mu", "gr", "drivetrain", "motor")
+        columns = ("name", "mass", "Cl", "Cd", "mu", "tyre", "gr", "drivetrain", "motor")
         self.config_tree = ttk.Treeview(
             list_frame, columns=columns, show="headings", height=5,
         )
@@ -92,18 +99,20 @@ class ConfigComparisonPanel(ttk.Frame):
         self.config_tree.heading("Cl", text="Cl")
         self.config_tree.heading("Cd", text="Cd")
         self.config_tree.heading("mu", text="mu")
+        self.config_tree.heading("tyre", text="Tyre")
         self.config_tree.heading("gr", text="GR")
         self.config_tree.heading("drivetrain", text="Drive")
         self.config_tree.heading("motor", text="Motor")
 
-        self.config_tree.column("name", width=110, anchor="w")
-        self.config_tree.column("mass", width=65, anchor="center")
-        self.config_tree.column("Cl", width=45, anchor="center")
-        self.config_tree.column("Cd", width=45, anchor="center")
-        self.config_tree.column("mu", width=45, anchor="center")
-        self.config_tree.column("gr", width=45, anchor="center")
-        self.config_tree.column("drivetrain", width=55, anchor="center")
-        self.config_tree.column("motor", width=100, anchor="w")
+        self.config_tree.column("name", width=100, anchor="w")
+        self.config_tree.column("mass", width=60, anchor="center")
+        self.config_tree.column("Cl", width=40, anchor="center")
+        self.config_tree.column("Cd", width=40, anchor="center")
+        self.config_tree.column("mu", width=40, anchor="center")
+        self.config_tree.column("tyre", width=60, anchor="center")
+        self.config_tree.column("gr", width=40, anchor="center")
+        self.config_tree.column("drivetrain", width=50, anchor="center")
+        self.config_tree.column("motor", width=90, anchor="w")
 
         scrollbar = ttk.Scrollbar(
             list_frame, orient="vertical", command=self.config_tree.yview,
@@ -233,6 +242,7 @@ class ConfigComparisonPanel(ttk.Frame):
             f"{s['Cl']}" if isinstance(s["Cl"], (int, float)) else s["Cl"],
             f"{s['Cd']}" if isinstance(s["Cd"], (int, float)) else s["Cd"],
             f"{s['mu']}" if isinstance(s["mu"], (int, float)) else s["mu"],
+            s.get("tyre_model", "Simple"),
             f"{s['gear_ratio']}" if isinstance(s["gear_ratio"], (int, float)) else s["gear_ratio"],
             s["drivetrain"],
             s["motor"],
@@ -275,13 +285,12 @@ class ConfigComparisonPanel(ttk.Frame):
         from models.vehicle import (
             VehicleParams,
             AeroParams,
-            TyreParamsMVP,
-            TyreParams,
             EVPowertrainMVP,
             EVPowertrainParams,
             BatteryParams,
             VehicleGeometry,
             TorqueVectoringParams,
+            build_tyre_from_config,
         )
 
         aero = AeroParams(
@@ -291,15 +300,7 @@ class ConfigComparisonPanel(ttk.Frame):
             A=config["aero"]["A"],
         )
 
-        tyre_config = config["tyre"]
-        if "C_alpha_f" in tyre_config:
-            tyre = TyreParams(
-                mu=tyre_config["mu"],
-                C_alpha_f=tyre_config.get("C_alpha_f", 45000.0),
-                C_alpha_r=tyre_config.get("C_alpha_r", 50000.0),
-            )
-        else:
-            tyre = TyreParamsMVP(mu=tyre_config["mu"])
+        tyre = build_tyre_from_config(config["tyre"])
 
         pt_config = config["powertrain"]
         if "drivetrain" in pt_config:
