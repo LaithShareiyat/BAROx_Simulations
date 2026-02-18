@@ -505,4 +505,3 @@ This project is developed for the University of Oxford Formula Student team (BAR
 
 - Blue Arrows Racing Oxford team members
 - University of Oxford Engineering Science department
-- EMRAX for motor specifications
