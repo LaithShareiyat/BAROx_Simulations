@@ -41,6 +41,66 @@ class TyreParams:
 
 
 @dataclass(frozen=True)
+class PacejkaCoefficients:
+    """Pacejka Magic Formula coefficients with load sensitivity.
+
+    D (peak)    = (a1 * Fz + a2) * Fz              [N]
+    BCD (stiff) = a3 * sin(a4 * arctan(a5 * Fz))   [N/rad or N]
+    B           = BCD / (C * D)                     [-]
+    E (curve)   = a6 * Fz + a7                      [-]
+
+    The Magic Formula:
+        F = D * sin(C * arctan(B*x - E*(B*x - arctan(B*x))))
+    where x is slip angle (lateral) or slip ratio (longitudinal).
+    """
+    C: float       # [-] shape factor
+    a1: float      # [1/N] D linear coefficient
+    a2: float      # [-] D offset coefficient
+    a3: float      # [N/rad or N] BCD amplitude
+    a4: float      # [-] BCD shape
+    a5: float      # [1/N] BCD Fz scaling
+    a6: float      # [1/N] E linear coefficient
+    a7: float      # [-] E offset
+
+
+@dataclass(frozen=True)
+class PacejkaParams:
+    """Pacejka Magic Formula tyre parameters.
+
+    Contains lateral and longitudinal coefficient sets plus
+    combined-slip weighting parameters (similarity method).
+
+    Combined slip:
+        F_x = G_xa(alpha) * F_x0(kappa)
+        F_y = G_yk(kappa) * F_y0(alpha)
+    where:
+        G_xa = cos(C_xa * arctan(B_xa * alpha))
+        G_yk = cos(C_yk * arctan(B_yk * kappa))
+    """
+    lateral: PacejkaCoefficients        # F_y(alpha) coefficients
+    longitudinal: PacejkaCoefficients   # F_x(kappa) coefficients
+
+    # Combined slip weighting
+    B_xa: float = 10.0    # [-] lateral effect on longitudinal
+    C_xa: float = 1.0     # [-] combined slip shape
+    B_yk: float = 10.0    # [-] longitudinal effect on lateral
+    C_yk: float = 1.0     # [-] combined slip shape
+
+    # Reference values
+    mu_peak: float = 1.6          # [-] peak friction coefficient (display / fallback)
+    Fz_nominal: float = 1500.0    # [N] nominal load for normalisation
+
+    # Cornering stiffness for bicycle model linear regime
+    C_alpha_f: float = 45000.0    # [N/rad] front axle cornering stiffness
+    C_alpha_r: float = 50000.0    # [N/rad] rear axle cornering stiffness
+
+    @property
+    def mu(self) -> float:
+        """Backward-compatible friction coefficient for fallback paths."""
+        return self.mu_peak
+
+
+@dataclass(frozen=True)
 class VehicleGeometry:
     """Vehicle geometry parameters for bicycle model and weight transfer."""
 
@@ -273,7 +333,7 @@ class VehicleParams:
     g: float  # m/s^2
     Crr: float  # [-]
     aero: AeroParams
-    tyre: Union[TyreParamsMVP, TyreParams]  # Either legacy or extended tyre model
+    tyre: Union[TyreParamsMVP, TyreParams, PacejkaParams]
     powertrain: Union[EVPowertrainMVP, EVPowertrainParams]  # Either legacy or extended
     battery: BatteryParams = None  # Optional battery params
     geometry: VehicleGeometry = None  # Optional geometry for bicycle model
@@ -285,9 +345,16 @@ class VehicleParams:
         return isinstance(self.powertrain, EVPowertrainParams)
 
     @property
+    def has_pacejka(self) -> bool:
+        """Check if using Pacejka tyre model."""
+        return isinstance(self.tyre, PacejkaParams)
+
+    @property
     def has_bicycle_model(self) -> bool:
         """Check if vehicle has parameters for bicycle model."""
-        return self.geometry is not None and isinstance(self.tyre, TyreParams)
+        return self.geometry is not None and isinstance(
+            self.tyre, (TyreParams, PacejkaParams)
+        )
 
     @property
     def has_torque_vectoring(self) -> bool:
@@ -306,7 +373,7 @@ class VehicleParams:
 
     def get_cornering_stiffness(self) -> tuple:
         """Get front and rear cornering stiffness [N/rad]."""
-        if isinstance(self.tyre, TyreParams):
+        if isinstance(self.tyre, (TyreParams, PacejkaParams)):
             return self.tyre.C_alpha_f, self.tyre.C_alpha_r
         else:
             # Estimate from friction coefficient and typical values
@@ -314,3 +381,63 @@ class VehicleParams:
             W_f = self.m * self.g * 0.5  # Approximate front weight
             W_r = self.m * self.g * 0.5  # Approximate rear weight
             return 20.0 * W_f, 20.0 * W_r
+
+
+def build_tyre_from_config(tyre_config: dict):
+    """Build tyre model from a config dictionary.
+
+    Handles all three tyre types: PacejkaParams, TyreParams, TyreParamsMVP.
+    Shared by app.py, main.py, and config_comparison_panel.py.
+
+    Args:
+        tyre_config: Dictionary from config["tyre"]
+
+    Returns:
+        TyreParamsMVP, TyreParams, or PacejkaParams
+    """
+    tyre_model = tyre_config.get("model", "simple")
+
+    if tyre_model == "pacejka":
+        pac = tyre_config.get("pacejka", {})
+        lat = pac.get("lateral", {})
+        lon = pac.get("longitudinal", {})
+        comb = pac.get("combined", {})
+
+        return PacejkaParams(
+            lateral=PacejkaCoefficients(
+                C=float(lat.get("C", 1.45)),
+                a1=float(lat.get("a1", -0.00013)),
+                a2=float(lat.get("a2", 1.8)),
+                a3=float(lat.get("a3", 50000)),
+                a4=float(lat.get("a4", 2.0)),
+                a5=float(lat.get("a5", 0.00035)),
+                a6=float(lat.get("a6", -0.0002)),
+                a7=float(lat.get("a7", -0.5)),
+            ),
+            longitudinal=PacejkaCoefficients(
+                C=float(lon.get("C", 1.65)),
+                a1=float(lon.get("a1", -0.00013)),
+                a2=float(lon.get("a2", 1.7)),
+                a3=float(lon.get("a3", 45000)),
+                a4=float(lon.get("a4", 2.0)),
+                a5=float(lon.get("a5", 0.0004)),
+                a6=float(lon.get("a6", -0.0002)),
+                a7=float(lon.get("a7", -0.3)),
+            ),
+            B_xa=float(comb.get("B_xa", 10.0)),
+            C_xa=float(comb.get("C_xa", 1.0)),
+            B_yk=float(comb.get("B_yk", 10.0)),
+            C_yk=float(comb.get("C_yk", 1.0)),
+            mu_peak=float(pac.get("mu_peak", 1.6)),
+            Fz_nominal=float(pac.get("Fz_nominal", 1500.0)),
+            C_alpha_f=float(tyre_config.get("C_alpha_f", 45000.0)),
+            C_alpha_r=float(tyre_config.get("C_alpha_r", 50000.0)),
+        )
+    elif "C_alpha_f" in tyre_config:
+        return TyreParams(
+            mu=float(tyre_config["mu"]),
+            C_alpha_f=float(tyre_config.get("C_alpha_f", 45000.0)),
+            C_alpha_r=float(tyre_config.get("C_alpha_r", 50000.0)),
+        )
+    else:
+        return TyreParamsMVP(mu=float(tyre_config["mu"]))

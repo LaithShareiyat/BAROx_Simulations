@@ -1,0 +1,108 @@
+# Tyre Database for BAROx Simulations
+# ====================================
+# Pacejka Magic Formula coefficients for FSAE tyres.
+#
+# Coefficient definitions:
+#   D (peak)    = (a1 * Fz + a2) * Fz          [N]
+#   BCD (stiff) = a3 * sin(a4 * arctan(a5 * Fz)) [N/rad or N]
+#   B           = BCD / (C * D)                  [-]
+#   E (curve)   = a6 * Fz + a7                   [-]
+#
+# Load sensitivity:
+#   mu_eff = a1 * Fz + a2  (effective friction coeff, decreases with Fz)
+#   At Fz_nominal, mu_eff should approximate mu_peak
+#
+# Combined slip (similarity method):
+#   G_xa = cos(C_xa * arctan(B_xa * alpha))
+#   G_yk = cos(C_yk * arctan(B_yk * kappa))
+
+tyres:
+  hoosier_r25b_18x6:
+    name: "Hoosier 18x6-10 R25B"
+    mu_peak: 1.65
+    Fz_nominal: 1500
+    C_alpha_f: 48000
+    C_alpha_r: 52000
+    lateral:
+      C: 1.45
+      a1: -0.00012
+      a2: 1.83
+      a3: 52000
+      a4: 2.0
+      a5: 0.00035
+      a6: -0.0002
+      a7: -0.5
+    longitudinal:
+      C: 1.65
+      a1: -0.00012
+      a2: 1.73
+      a3: 47000
+      a4: 2.0
+      a5: 0.0004
+      a6: -0.0002
+      a7: -0.3
+    combined:
+      B_xa: 10.0
+      C_xa: 1.0
+      B_yk: 10.0
+      C_yk: 1.0
+
+  hoosier_lc0_13:
+    name: "Hoosier 20.5x7-13 LC0"
+    mu_peak: 1.55
+    Fz_nominal: 1600
+    C_alpha_f: 42000
+    C_alpha_r: 46000
+    lateral:
+      C: 1.40
+      a1: -0.00011
+      a2: 1.73
+      a3: 46000
+      a4: 1.9
+      a5: 0.00032
+      a6: -0.00018
+      a7: -0.45
+    longitudinal:
+      C: 1.60
+      a1: -0.00011
+      a2: 1.68
+      a3: 42000
+      a4: 1.9
+      a5: 0.00038
+      a6: -0.00018
+      a7: -0.28
+    combined:
+      B_xa: 9.5
+      C_xa: 1.0
+      B_yk: 9.5
+      C_yk: 1.0
+
+  hoosier_r25b_16x7:
+    name: "Hoosier 16x7.5-10 R25B"
+    mu_peak: 1.60
+    Fz_nominal: 1400
+    C_alpha_f: 44000
+    C_alpha_r: 48000
+    lateral:
+      C: 1.42
+      a1: -0.00013
+      a2: 1.78
+      a3: 48000
+      a4: 2.0
+      a5: 0.00036
+      a6: -0.0002
+      a7: -0.48
+    longitudinal:
+      C: 1.62
+      a1: -0.00013
+      a2: 1.70
+      a3: 44000
+      a4: 2.0
+      a5: 0.00039
+      a6: -0.0002
+      a7: -0.30
+    combined:
+      B_xa: 10.0
+      C_xa: 1.0
+      B_yk: 10.0
+      C_yk: 1.0
