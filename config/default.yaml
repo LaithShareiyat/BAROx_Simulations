@@ -17,10 +17,39 @@ aero:
   A: 1.0      # Frontal area [m²]
 
 tyre:
+  model: simple            # "simple" or "pacejka"
   mu: 1.6
   # Extended tyre parameters for bicycle model
-  C_alpha_f: 45000      # Front cornering stiffness [N/rad]
-  C_alpha_r: 50000      # Rear cornering stiffness [N/rad]
+  C_alpha_f: 45000         # Front cornering stiffness [N/rad]
+  C_alpha_r: 50000         # Rear cornering stiffness [N/rad]
+  # Pacejka parameters (used only when model: pacejka)
+  pacejka:
+    tyre_preset: hoosier_r25b_18x6
+    mu_peak: 1.6
+    Fz_nominal: 1500.0
+    lateral:
+      C: 1.45               # Shape factor
+      a1: -0.00013           # D linear (load sensitivity) [1/N]
+      a2: 1.8                # D offset (base mu)
+      a3: 50000              # BCD amplitude [N/rad]
+      a4: 2.0                # BCD shape
+      a5: 0.00035            # BCD Fz scaling [1/N]
+      a6: -0.0002            # E linear [1/N]
+      a7: -0.5               # E offset
+    longitudinal:
+      C: 1.65                # Shape factor
+      a1: -0.00013           # D linear [1/N]
+      a2: 1.7                # D offset (base mu)
+      a3: 45000              # BCD amplitude [N]
+      a4: 2.0                # BCD shape
+      a5: 0.0004             # BCD Fz scaling [1/N]
+      a6: -0.0002            # E linear [1/N]
+      a7: -0.3               # E offset
+    combined:
+      B_xa: 10.0
+      C_xa: 1.0
+      B_yk: 10.0
+      C_yk: 1.0
 
 # Vehicle geometry for bicycle model and weight transfer
 geometry:

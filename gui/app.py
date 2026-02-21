@@ -363,13 +363,12 @@ class BAROxGUI:
         from models.vehicle import (
             VehicleParams,
             AeroParams,
-            TyreParamsMVP,
-            TyreParams,
             EVPowertrainMVP,
             EVPowertrainParams,
             BatteryParams,
             VehicleGeometry,
             TorqueVectoringParams,
+            build_tyre_from_config,
         )
 
         aero = AeroParams(
@@ -379,16 +378,7 @@ class BAROxGUI:
             A=config["aero"]["A"],
         )
 
-        # Check if using extended tyre model with cornering stiffness
-        tyre_config = config["tyre"]
-        if "C_alpha_f" in tyre_config:
-            tyre = TyreParams(
-                mu=tyre_config["mu"],
-                C_alpha_f=tyre_config.get("C_alpha_f", 45000.0),
-                C_alpha_r=tyre_config.get("C_alpha_r", 50000.0),
-            )
-        else:
-            tyre = TyreParamsMVP(mu=tyre_config["mu"])
+        tyre = build_tyre_from_config(config["tyre"])
 
         # Check if using new extended powertrain format or legacy format
         pt_config = config["powertrain"]
@@ -889,7 +879,13 @@ class BAROxGUI:
         lines.append(f"Drag Coefficient (Cd): {config['aero']['Cd']}")
         lines.append(f"Lift Coefficient (Cl): {config['aero']['Cl']}")
         lines.append(f"Frontal Area: {config['aero']['A']} m²")
-        lines.append(f"Tyre Friction (μ): {config['tyre']['mu']}")
+        tyre_model = config['tyre'].get('model', 'simple')
+        if tyre_model == 'pacejka':
+            pac = config['tyre'].get('pacejka', {})
+            mu_peak = pac.get('mu_peak', config['tyre'].get('mu', 1.6))
+            lines.append(f"Tyre Model: Pacejka (μ_peak: {mu_peak})")
+        else:
+            lines.append(f"Tyre Friction (μ): {config['tyre']['mu']}")
 
         # Powertrain info - handle both new and legacy formats
         pt = config["powertrain"]

@@ -31,6 +31,7 @@ import numpy as np
 from dataclasses import dataclass
 from models.vehicle import VehicleParams, TorqueVectoringParams
 from physics.weight_transfer import calculate_wheel_loads, WheelLoads
+from physics.tyre import max_longitudinal_force
 
 
 @dataclass
@@ -75,7 +76,6 @@ def calculate_tv_yaw_moment(vehicle: VehicleParams,
         )
 
     tv = vehicle.torque_vectoring
-    mu = vehicle.mu
 
     # Get geometry
     if vehicle.geometry is not None:
@@ -144,7 +144,6 @@ def _load_proportional_split(vehicle: VehicleParams,
     This maximises traction by ensuring each wheel operates at the
     same grip utilisation level.
     """
-    mu = vehicle.mu
     loads_dict = loads.as_dict()
 
     # Total vertical load on driven wheels
@@ -183,7 +182,7 @@ def _load_proportional_split(vehicle: VehicleParams,
     # Check grip limits
     limited = False
     for w in driven_wheels:
-        F_x_max = mu * loads_dict[w]
+        F_x_max = max_longitudinal_force(vehicle.tyre, loads_dict[w])
         if abs(F_x_per_wheel[w]) > F_x_max:
             limited = True
             break
@@ -228,7 +227,6 @@ def _fixed_bias_split(vehicle: VehicleParams,
     Simpler strategy that applies a fixed percentage more torque
     to the outer wheels regardless of load transfer.
     """
-    mu = vehicle.mu
     loads_dict = loads.as_dict()
 
     bias = tv.max_torque_transfer * tv.effectiveness
@@ -263,7 +261,7 @@ def _fixed_bias_split(vehicle: VehicleParams,
     # Check grip limits
     limited = False
     for w in driven_wheels:
-        F_x_max = mu * loads_dict[w]
+        F_x_max = max_longitudinal_force(vehicle.tyre, loads_dict[w])
         if abs(F_x_per_wheel[w]) > F_x_max:
             limited = True
             break
@@ -305,7 +303,6 @@ def calculate_tv_lateral_benefit(vehicle: VehicleParams,
         return 1.0
 
     tv = vehicle.torque_vectoring
-    mu = vehicle.mu
     g = vehicle.g
 
     # Calculate TV yaw moment at this condition
@@ -359,7 +356,6 @@ def calculate_tv_traction_benefit(vehicle: VehicleParams,
         return 1.0
 
     tv = vehicle.torque_vectoring
-    mu = vehicle.mu
 
     # Calculate wheel loads
     loads = calculate_wheel_loads(vehicle, a_x, a_y)
@@ -382,10 +378,10 @@ def calculate_tv_traction_benefit(vehicle: VehicleParams,
 
     # Without TV: limited by lowest-loaded wheel
     F_z_min = min(loads_dict[w] for w in driven)
-    F_x_without_tv = mu * F_z_min * len(driven)
+    F_x_without_tv = max_longitudinal_force(vehicle.tyre, F_z_min) * len(driven)
 
     # With TV: can use all available grip
-    F_x_with_tv = sum(mu * loads_dict[w] for w in driven)
+    F_x_with_tv = sum(max_longitudinal_force(vehicle.tyre, loads_dict[w]) for w in driven)
 
     # Improvement ratio
     if F_x_without_tv > 0:

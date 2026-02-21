@@ -11,13 +11,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from models.vehicle import (
     VehicleParams,
     AeroParams,
-    TyreParamsMVP,
-    TyreParams,
     EVPowertrainMVP,
     EVPowertrainParams,
     BatteryParams,
     VehicleGeometry,
     TorqueVectoringParams,
+    build_tyre_from_config,
 )
 from solver.qss_speed import solve_qss
 from solver.metrics import lap_time, channels, energy_consumption
@@ -74,18 +73,7 @@ def create_vehicle_from_config(config: dict) -> VehicleParams:
         A=config["aero"]["A"],
     )
 
-    # Check if using extended tyre model with cornering stiffness
-    tyre_config = config["tyre"]
-    if "C_alpha_f" in tyre_config:
-        tyre = TyreParams(
-            mu=tyre_config["mu"],
-            C_alpha_f=tyre_config.get("C_alpha_f", 45000.0),
-            C_alpha_r=tyre_config.get("C_alpha_r", 50000.0),
-        )
-    else:
-        tyre = TyreParamsMVP(
-            mu=tyre_config["mu"],
-        )
+    tyre = build_tyre_from_config(config["tyre"])
 
     # Check if using new extended powertrain format or legacy format
     pt_config = config["powertrain"]
