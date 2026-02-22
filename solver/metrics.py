@@ -97,3 +97,31 @@ def energy_consumption(
         "E_net_J": E_net,
         "E_net_kWh": E_net / 3.6e6,
     }
+
+
+def average_braking_speed(track: Track, v: np.ndarray, v_eps: float = 0.1) -> float:
+    """
+    Time-weighted average speed during braking zones.
+
+    Braking zones are segments where speed is decreasing (v[i+1] < v[i]).
+    Each segment is weighted by the time spent in it: dt = ds / v_mid.
+
+    Args:
+        track: Track object with ds array.
+        v: Velocity profile [m/s] at each track point.
+        v_eps: Minimum velocity to avoid division by zero [m/s].
+
+    Returns:
+        Time-weighted average braking speed [m/s], or 0.0 if no braking.
+    """
+    v_mid = 0.5 * (v[:-1] + v[1:])
+    braking = v[1:] < v[:-1]
+
+    if not np.any(braking):
+        return 0.0
+
+    v_mid_brake = np.maximum(v_mid[braking], v_eps)
+    ds_brake = track.ds[braking]
+    dt = ds_brake / v_mid_brake
+
+    return float(np.sum(v_mid_brake * dt) / np.sum(dt))
