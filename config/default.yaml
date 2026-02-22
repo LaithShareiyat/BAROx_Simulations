@@ -17,7 +17,7 @@ aero:
   A: 1.0      # Frontal area [m²]
 
 tyre:
-  model: simple            # "simple" or "pacejka"
+  model: pacejka           # "simple" or "pacejka"
   mu: 1.6
   # Extended tyre parameters for bicycle model
   C_alpha_f: 45000         # Front cornering stiffness [N/rad]
