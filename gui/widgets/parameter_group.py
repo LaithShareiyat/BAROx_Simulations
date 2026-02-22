@@ -56,7 +56,7 @@ class ParameterGroup(ttk.LabelFrame):
 
             # Add unit label if present
             if 'unit' in param:
-                unit_lbl = ttk.Label(self, text=param['unit'], foreground='gray')
+                unit_lbl = ttk.Label(self, text=param['unit'], foreground='grey')
                 unit_lbl.grid(row=i, column=2, sticky='w', padx=(0, 5), pady=2)
 
     def _validate(self, name: str, param_type: str) -> bool:

@@ -170,12 +170,12 @@ def plot_skidpad_full(title: str = "Formula Student Skidpad - Full Layout"):
         y_inner = centre[1] + SKIDPAD_INNER_RADIUS * np.sin(theta_fill[::-1])
         ax.fill(np.concatenate([x_outer, x_inner]),
                 np.concatenate([y_outer, y_inner]),
-                color='gray', alpha=0.2)
+                color='grey', alpha=0.2)
 
     # Shade the continuous lane (from bottom to top through middle)
     ax.fill([lane_left_x, lane_right_x, lane_right_x, lane_left_x],
             [lane_bottom_y, lane_bottom_y, lane_top_y, lane_top_y],
-            color='gray', alpha=0.2)
+            color='grey', alpha=0.2)
 
     # Mark circle centres
     ax.plot(*left_centre, 'rx', markersize=10, mew=2, label='Circle centres')

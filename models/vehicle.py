@@ -7,8 +7,14 @@ from typing import Union
 class AeroParams:
     rho: float  # kg/m^3 - air density
     Cd: float  # [-] - drag coefficient
-    Cl: float  # [-] - lift coefficient (downforce is positive)
+    Cl_f: float  # [-] - front axle lift coefficient (downforce positive)
+    Cl_r: float  # [-] - rear axle lift coefficient (downforce positive)
     A: float  # m^2 - frontal area
+
+    @property
+    def Cl(self) -> float:
+        """Total lift coefficient [-]."""
+        return self.Cl_f + self.Cl_r
 
     @property
     def CD_A(self) -> float:
@@ -17,8 +23,26 @@ class AeroParams:
 
     @property
     def CL_A(self) -> float:
-        """Lift coefficient × Area [m²]"""
+        """Total lift coefficient × Area [m²]"""
         return self.Cl * self.A
+
+    @property
+    def CL_A_f(self) -> float:
+        """Front lift coefficient × Area [m²]"""
+        return self.Cl_f * self.A
+
+    @property
+    def CL_A_r(self) -> float:
+        """Rear lift coefficient × Area [m²]"""
+        return self.Cl_r * self.A
+
+    @property
+    def aero_balance_front(self) -> float:
+        """Front aero balance fraction [0–1]. Returns 0.5 if Cl is zero."""
+        total = self.Cl_f + self.Cl_r
+        if total == 0:
+            return 0.5
+        return self.Cl_f / total
 
 
 @dataclass(frozen=True)
@@ -441,3 +465,26 @@ def build_tyre_from_config(tyre_config: dict):
         )
     else:
         return TyreParamsMVP(mu=float(tyre_config["mu"]))
+
+
+def build_aero_from_config(aero_cfg: dict) -> AeroParams:
+    """Build AeroParams from a config dictionary.
+
+    Handles backward compatibility: old configs with single 'Cl'
+    are split 50/50 into Cl_f and Cl_r.
+    """
+    if "Cl_f" in aero_cfg:
+        Cl_f = float(aero_cfg["Cl_f"])
+        Cl_r = float(aero_cfg["Cl_r"])
+    else:
+        Cl_total = float(aero_cfg.get("Cl", 0.0))
+        Cl_f = Cl_total * 0.5
+        Cl_r = Cl_total * 0.5
+
+    return AeroParams(
+        rho=float(aero_cfg["rho"]),
+        Cd=float(aero_cfg["Cd"]),
+        Cl_f=Cl_f,
+        Cl_r=Cl_r,
+        A=float(aero_cfg["A"]),
+    )

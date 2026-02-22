@@ -97,7 +97,7 @@ class BAROxGUI:
         style.configure("Invalid.TEntry", fieldbackground="#ffcccc")
 
         # Unit label style (for control_panel kg, kW, etc.)
-        unit_fg = "#888888" if is_dark else "gray"
+        unit_fg = "#888888" if is_dark else "grey"
         style.configure("Unit.TLabel", background=bg, foreground=unit_fg)
 
         # Theme-aware text colours for results cards
@@ -369,14 +369,10 @@ class BAROxGUI:
             VehicleGeometry,
             TorqueVectoringParams,
             build_tyre_from_config,
+            build_aero_from_config,
         )
 
-        aero = AeroParams(
-            rho=config["aero"]["rho"],
-            Cd=config["aero"]["Cd"],
-            Cl=config["aero"]["Cl"],
-            A=config["aero"]["A"],
-        )
+        aero = build_aero_from_config(config["aero"])
 
         tyre = build_tyre_from_config(config["tyre"])
 

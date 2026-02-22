@@ -102,9 +102,12 @@ def calculate_static_loads(vehicle: VehicleParams) -> WheelLoads:
 
 def calculate_wheel_loads(vehicle: VehicleParams,
                           a_x: float = 0.0,
-                          a_y: float = 0.0) -> WheelLoads:
+                          a_y: float = 0.0,
+                          V: float = 0.0) -> WheelLoads:
     """
     Calculate wheel loads with weight transfer from acceleration.
+
+    Includes aerodynamic downforce distributed by aero balance.
 
     Sign conventions:
         a_x > 0: accelerating (load transfers rearward)
@@ -116,10 +119,13 @@ def calculate_wheel_loads(vehicle: VehicleParams,
         vehicle: Vehicle parameters
         a_x: Longitudinal acceleration [m/s²]
         a_y: Lateral acceleration [m/s²]
+        V: Current velocity [m/s] (for downforce calculation)
 
     Returns:
         WheelLoads with dynamic vertical loads [N]
     """
+    from physics.aero import downforce
+
     m = vehicle.m
     g = vehicle.g
     W = m * g
@@ -142,9 +148,15 @@ def calculate_wheel_loads(vehicle: VehicleParams,
         t_r = 1.20
         h = 0.28
 
-    # Static load distribution
-    W_front_static = W * (L_r / L)
-    W_rear_static = W * (L_f / L)
+    # Aerodynamic downforce split by aero balance
+    Fdown = downforce(vehicle.aero.rho, vehicle.aero.CL_A, V)
+    aero_bal = vehicle.aero.aero_balance_front
+    Fdown_f = Fdown * aero_bal
+    Fdown_r = Fdown * (1.0 - aero_bal)
+
+    # Static load distribution + downforce
+    W_front_static = W * (L_r / L) + Fdown_f
+    W_rear_static = W * (L_f / L) + Fdown_r
 
     # Longitudinal weight transfer
     dW_longitudinal = (m * a_x * h) / L
@@ -186,17 +198,23 @@ def calculate_wheel_loads(vehicle: VehicleParams,
 
 
 def calculate_axle_loads(vehicle: VehicleParams,
-                         a_x: float = 0.0) -> tuple:
+                         a_x: float = 0.0,
+                         V: float = 0.0) -> tuple:
     """
     Calculate front and rear axle loads (for bicycle model).
+
+    Includes aerodynamic downforce distributed by aero balance.
 
     Args:
         vehicle: Vehicle parameters
         a_x: Longitudinal acceleration [m/s²]
+        V: Current velocity [m/s] (for downforce calculation)
 
     Returns:
         (F_z_front, F_z_rear): Axle loads [N]
     """
+    from physics.aero import downforce
+
     m = vehicle.m
     g = vehicle.g
     W = m * g
@@ -217,11 +235,17 @@ def calculate_axle_loads(vehicle: VehicleParams,
     W_front_static = W * (L_r / L)
     W_rear_static = W * (L_f / L)
 
+    # Aerodynamic downforce split by aero balance
+    Fdown = downforce(vehicle.aero.rho, vehicle.aero.CL_A, V)
+    aero_bal = vehicle.aero.aero_balance_front
+    Fdown_f = Fdown * aero_bal
+    Fdown_r = Fdown * (1.0 - aero_bal)
+
     # Longitudinal transfer
     dW = (m * a_x * h) / L
 
-    F_z_front = max(0.0, W_front_static - dW)
-    F_z_rear = max(0.0, W_rear_static + dW)
+    F_z_front = max(0.0, W_front_static + Fdown_f - dW)
+    F_z_rear = max(0.0, W_rear_static + Fdown_r + dW)
 
     return F_z_front, F_z_rear
 

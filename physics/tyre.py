@@ -431,10 +431,10 @@ def ax_traction_axle_aware(mu, vehicle, V, kappa, Fdown, M_z_tv=0.0):
     F_yr = (m * a_y * L_f + M_z_tv) / L
     F_yf = m * a_y - F_yr
 
-    # Split downforce proportional to weight distribution
-    wd_front = geo.weight_distribution_front
-    Fdown_f = Fdown * wd_front
-    Fdown_r = Fdown * (1 - wd_front)
+    # Split downforce by aero balance
+    aero_bal = vehicle.aero.aero_balance_front
+    Fdown_f = Fdown * aero_bal
+    Fdown_r = Fdown * (1.0 - aero_bal)
 
     # Static axle weights + downforce
     W = m * g
@@ -500,10 +500,10 @@ def ax_braking_axle_aware(mu, vehicle, V, kappa, Fdown, M_z_tv=0.0):
     F_yr = (m * a_y * L_f + M_z_tv) / L
     F_yf = m * a_y - F_yr
 
-    # Split downforce proportional to weight distribution
-    wd_front = geo.weight_distribution_front
-    Fdown_f = Fdown * wd_front
-    Fdown_r = Fdown * (1 - wd_front)
+    # Split downforce by aero balance
+    aero_bal = vehicle.aero.aero_balance_front
+    Fdown_f = Fdown * aero_bal
+    Fdown_r = Fdown * (1.0 - aero_bal)
 
     # Static axle weights + downforce
     W = m * g

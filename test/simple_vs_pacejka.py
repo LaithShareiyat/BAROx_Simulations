@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models.vehicle import (
     VehicleParams, AeroParams,
     EVPowertrainParams, VehicleGeometry, build_tyre_from_config,
+    build_aero_from_config,
 )
 from solver.qss_speed import solve_qss
 from events.autocross_generator import build_standard_autocross
@@ -38,10 +39,7 @@ def build_vehicles(config: dict) -> tuple:
     Returns:
         (vehicle_simple, vehicle_pacejka)
     """
-    aero = AeroParams(
-        rho=config["aero"]["rho"], Cd=config["aero"]["Cd"],
-        Cl=config["aero"]["Cl"], A=config["aero"]["A"],
-    )
+    aero = build_aero_from_config(config["aero"])
     geo = VehicleGeometry(**config["geometry"])
 
     pt_cfg = config["powertrain"]

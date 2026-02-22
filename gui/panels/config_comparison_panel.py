@@ -34,9 +34,19 @@ def _summarise_config(config: dict) -> dict:
         pac = t.get("pacejka", {})
         mu_display = pac.get("mu_peak", mu_display)
 
+    # Backward compat: old configs may have single Cl
+    if "Cl_f" in a:
+        Cl_f = a["Cl_f"]
+        Cl_r = a["Cl_r"]
+    else:
+        Cl_total = a.get("Cl", 0)
+        Cl_f = Cl_total * 0.5
+        Cl_r = Cl_total * 0.5
+
     return {
         "mass_kg": v.get("mass_kg", "—"),
-        "Cl": a.get("Cl", "—"),
+        "Cl_f": Cl_f,
+        "Cl_r": Cl_r,
         "Cd": a.get("Cd", "—"),
         "mu": mu_display,
         "tyre_model": tyre_model.capitalize(),
@@ -89,14 +99,15 @@ class ConfigComparisonPanel(ttk.Frame):
         )
         list_frame.pack(fill="x", padx=8, pady=(8, 4))
 
-        columns = ("name", "mass", "Cl", "Cd", "mu", "tyre", "gr", "drivetrain", "motor")
+        columns = ("name", "mass", "Cl_f", "Cl_r", "Cd", "mu", "tyre", "gr", "drivetrain", "motor")
         self.config_tree = ttk.Treeview(
             list_frame, columns=columns, show="headings", height=5,
         )
 
         self.config_tree.heading("name", text="Name")
         self.config_tree.heading("mass", text="Mass (kg)")
-        self.config_tree.heading("Cl", text="Cl")
+        self.config_tree.heading("Cl_f", text="Cl_f")
+        self.config_tree.heading("Cl_r", text="Cl_r")
         self.config_tree.heading("Cd", text="Cd")
         self.config_tree.heading("mu", text="mu")
         self.config_tree.heading("tyre", text="Tyre")
@@ -106,7 +117,8 @@ class ConfigComparisonPanel(ttk.Frame):
 
         self.config_tree.column("name", width=100, anchor="w")
         self.config_tree.column("mass", width=60, anchor="center")
-        self.config_tree.column("Cl", width=40, anchor="center")
+        self.config_tree.column("Cl_f", width=40, anchor="center")
+        self.config_tree.column("Cl_r", width=40, anchor="center")
         self.config_tree.column("Cd", width=40, anchor="center")
         self.config_tree.column("mu", width=40, anchor="center")
         self.config_tree.column("tyre", width=60, anchor="center")
@@ -239,7 +251,8 @@ class ConfigComparisonPanel(ttk.Frame):
         self.config_tree.insert("", "end", values=(
             name,
             f"{s['mass_kg']:.1f}" if isinstance(s["mass_kg"], (int, float)) else s["mass_kg"],
-            f"{s['Cl']}" if isinstance(s["Cl"], (int, float)) else s["Cl"],
+            f"{s['Cl_f']}" if isinstance(s["Cl_f"], (int, float)) else s["Cl_f"],
+            f"{s['Cl_r']}" if isinstance(s["Cl_r"], (int, float)) else s["Cl_r"],
             f"{s['Cd']}" if isinstance(s["Cd"], (int, float)) else s["Cd"],
             f"{s['mu']}" if isinstance(s["mu"], (int, float)) else s["mu"],
             s.get("tyre_model", "Simple"),
@@ -291,14 +304,10 @@ class ConfigComparisonPanel(ttk.Frame):
             VehicleGeometry,
             TorqueVectoringParams,
             build_tyre_from_config,
+            build_aero_from_config,
         )
 
-        aero = AeroParams(
-            rho=config["aero"]["rho"],
-            Cd=config["aero"]["Cd"],
-            Cl=config["aero"]["Cl"],
-            A=config["aero"]["A"],
-        )
+        aero = build_aero_from_config(config["aero"])
 
         tyre = build_tyre_from_config(config["tyre"])
 

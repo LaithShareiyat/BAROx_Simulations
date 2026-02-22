@@ -514,7 +514,7 @@ def plot_autocross(track: Track, v: np.ndarray = None, metadata: dict = None,
     # Shade track area
     ax.fill(np.concatenate([x_left, x_right[::-1]]),
             np.concatenate([y_left, y_right[::-1]]),
-            color='gray', alpha=0.15)
+            color='grey', alpha=0.15)
     
     # Track info
     track_length = track.s[-1]
