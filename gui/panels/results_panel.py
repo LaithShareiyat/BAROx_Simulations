@@ -476,6 +476,7 @@ class ResultsPanel(ttk.Frame):
             ["Parameter", "m/s", "km/h"],
             [
                 ("Average", f"{metrics['avg_speed']:.2f}", f"{metrics['avg_speed'] * 3.6:.1f}"),
+                ("Avg Braking", f"{metrics['avg_braking_speed']:.2f}", f"{metrics['avg_braking_speed'] * 3.6:.1f}"),
                 ("Maximum", f"{metrics['max_speed']:.2f}", f"{metrics['max_speed'] * 3.6:.1f}"),
                 ("Minimum", f"{metrics['min_speed']:.2f}", f"{metrics['min_speed'] * 3.6:.1f}"),
             ],

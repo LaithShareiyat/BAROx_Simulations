@@ -598,7 +598,9 @@ class BAROxGUI:
 
     def _compute_metrics(self, track, v: np.ndarray, vehicle) -> dict:
         """Compute performance metrics from velocity profile."""
-        from solver.metrics import lap_time, channels, energy_consumption
+        from solver.metrics import (
+            lap_time, channels, energy_consumption, average_braking_speed,
+        )
 
         t = lap_time(track, v)
         ax, ay = channels(track, v)
@@ -624,6 +626,7 @@ class BAROxGUI:
             "min_ax": np.min(ax_clean) if len(ax_clean) > 0 else 0.0,
             "max_ay": np.max(np.abs(ay_clean)) if len(ay_clean) > 0 else 0.0,
             "energy_consumed_kWh": energy_kwh,
+            "avg_braking_speed": average_braking_speed(track, v),
         }
 
     def _analyse_max_speed(self, track, v, v_fwd, v_bwd, v_lat, vehicle):
