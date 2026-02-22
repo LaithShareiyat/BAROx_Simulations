@@ -156,9 +156,9 @@ class ControlPanel(ttk.Frame):
                 "mass_battery_kg": 45,  # 142S5P pack
                 "mass_electronics_kg": 25,
             },
-            "aero": {"rho": 1.225, "Cd": 1.1, "Cl": 1.5, "A": 1.0},
+            "aero": {"rho": 1.225, "Cd": 1.1, "Cl_f": 0.75, "Cl_r": 0.75, "A": 1.0},
             "tyre": {
-                "model": "simple",
+                "model": "pacejka",
                 "mu": 1.6,
                 "C_alpha_f": 45000,
                 "C_alpha_r": 50000,
@@ -289,7 +289,8 @@ class ControlPanel(ttk.Frame):
             [
                 ("rho", "Air Density", "kg/m³"),
                 ("Cd", "Drag Coeff (Cd)", ""),
-                ("Cl", "Lift Coeff (Cl)", ""),
+                ("Cl_f", "Front Lift Coeff (Cl_f)", ""),
+                ("Cl_r", "Rear Lift Coeff (Cl_r)", ""),
                 ("A", "Frontal Area", "m²"),
             ],
         )

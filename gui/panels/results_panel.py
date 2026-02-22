@@ -760,7 +760,7 @@ class ResultsPanel(ttk.Frame):
             ax1.fill(
                 np.concatenate([x_left, x_right[::-1]]),
                 np.concatenate([y_left, y_right[::-1]]),
-                color="gray",
+                color="grey",
                 alpha=0.15,
             )
 
@@ -828,7 +828,7 @@ class ResultsPanel(ttk.Frame):
                 ax2.fill(
                     np.concatenate([x_outer, x_inner]),
                     np.concatenate([y_outer, y_inner]),
-                    color="gray",
+                    color="grey",
                     alpha=0.2,
                 )
 
@@ -836,7 +836,7 @@ class ResultsPanel(ttk.Frame):
             ax2.fill(
                 [lane_left_x, lane_right_x, lane_right_x, lane_left_x],
                 [lane_bottom_y, lane_bottom_y, lane_top_y, lane_top_y],
-                color="gray",
+                color="grey",
                 alpha=0.2,
             )
 
@@ -970,7 +970,7 @@ class ResultsPanel(ttk.Frame):
             ax1.fill(
                 np.concatenate([x_left, x_right[::-1]]),
                 np.concatenate([y_left, y_right[::-1]]),
-                color="gray",
+                color="grey",
                 alpha=0.15,
             )
 
@@ -1090,7 +1090,7 @@ class ResultsPanel(ttk.Frame):
         ax.fill(
             np.concatenate([x_left, x_right[::-1]]),
             np.concatenate([y_left, y_right[::-1]]),
-            color="gray",
+            color="grey",
             alpha=0.15,
         )
 
@@ -1580,7 +1580,7 @@ class ResultsPanel(ttk.Frame):
                 ha="center",
                 va="center",
                 fontsize=12,
-                color="gray",
+                color="grey",
                 transform=ax.transAxes,
             )
             ax.set_xticks([])

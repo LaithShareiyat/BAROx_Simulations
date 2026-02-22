@@ -17,6 +17,7 @@ from models.vehicle import (
     VehicleGeometry,
     TorqueVectoringParams,
     build_tyre_from_config,
+    build_aero_from_config,
 )
 from solver.qss_speed import solve_qss
 from solver.metrics import lap_time, channels, energy_consumption
@@ -66,12 +67,7 @@ def get_motor_params(motor_id: str, motors_db: dict = None) -> dict:
 
 def create_vehicle_from_config(config: dict) -> VehicleParams:
     """Create a VehicleParams object from config dictionary."""
-    aero = AeroParams(
-        rho=config["aero"]["rho"],
-        Cd=config["aero"]["Cd"],
-        Cl=config["aero"]["Cl"],
-        A=config["aero"]["A"],
-    )
+    aero = build_aero_from_config(config["aero"])
 
     tyre = build_tyre_from_config(config["tyre"])
 
@@ -275,9 +271,14 @@ def get_custom_vehicle_params(defaults: dict) -> dict:
             default=str(defaults["aero"]["Cd"]),
         ),
         inquirer.Text(
-            "Cl",
-            message=f"Lift coefficient (Cl) [-] ({defaults['aero']['Cl']})",
-            default=str(defaults["aero"]["Cl"]),
+            "Cl_f",
+            message=f"Front lift coefficient (Cl_f) [-] ({defaults['aero'].get('Cl_f', 0.75)})",
+            default=str(defaults["aero"].get("Cl_f", 0.75)),
+        ),
+        inquirer.Text(
+            "Cl_r",
+            message=f"Rear lift coefficient (Cl_r) [-] ({defaults['aero'].get('Cl_r', 0.75)})",
+            default=str(defaults["aero"].get("Cl_r", 0.75)),
         ),
         inquirer.Text(
             "A",
@@ -492,7 +493,8 @@ def get_custom_vehicle_params(defaults: dict) -> dict:
         "aero": {
             "rho": float(aero_answers["rho"]),
             "Cd": float(aero_answers["Cd"]),
-            "Cl": float(aero_answers["Cl"]),
+            "Cl_f": float(aero_answers["Cl_f"]),
+            "Cl_r": float(aero_answers["Cl_r"]),
             "A": float(aero_answers["A"]),
         },
         "tyre": {
@@ -562,8 +564,11 @@ def print_vehicle_params(config: dict):
     """Print vehicle parameters in a formatted table."""
     print_header("VEHICLE CONFIGURATION")
 
-    cd_a = config["aero"]["Cd"] * config["aero"]["A"]
-    cl_a = config["aero"]["Cl"] * config["aero"]["A"]
+    aero = config["aero"]
+    cd_a = aero["Cd"] * aero["A"]
+    Cl_f = aero.get("Cl_f", aero.get("Cl", 0) * 0.5)
+    Cl_r = aero.get("Cl_r", aero.get("Cl", 0) * 0.5)
+    cl_a = (Cl_f + Cl_r) * aero["A"]
 
     print("\n  VEHICLE")
     print(f"    Mass:              {config['vehicle']['mass_kg']} kg")
@@ -571,10 +576,11 @@ def print_vehicle_params(config: dict):
     print(f"    Rolling resist:    {config['vehicle']['Crr']}")
 
     print("\n  AERODYNAMICS")
-    print(f"    Air density:       {config['aero']['rho']} kg/m3")
-    print(f"    Cd:                {config['aero']['Cd']}")
-    print(f"    Cl:                {config['aero']['Cl']}")
-    print(f"    Frontal area:      {config['aero']['A']} m2")
+    print(f"    Air density:       {aero['rho']} kg/m3")
+    print(f"    Cd:                {aero['Cd']}")
+    print(f"    Cl_f:              {Cl_f}")
+    print(f"    Cl_r:              {Cl_r}")
+    print(f"    Frontal area:      {aero['A']} m2")
     print(f"    Cd x A:            {cd_a:.3f} m2")
     print(f"    Cl x A:            {cl_a:.3f} m2")
 

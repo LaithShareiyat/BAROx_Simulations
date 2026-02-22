@@ -225,7 +225,7 @@ class BatteryOptimiserPanel(ttk.Frame):
             entry = ttk.Entry(frame, textvariable=var, width=10)
             entry.grid(row=i, column=1, sticky="w", padx=5, pady=2)
 
-            unit_lbl = ttk.Label(frame, text=unit, foreground="gray", width=6)
+            unit_lbl = ttk.Label(frame, text=unit, foreground="grey", width=6)
             unit_lbl.grid(row=i, column=2, sticky="w", pady=2)
 
             self.cell_vars[key] = var
@@ -325,7 +325,7 @@ class BatteryOptimiserPanel(ttk.Frame):
             entry = ttk.Entry(frame, textvariable=var, width=10)
             entry.grid(row=i, column=1, sticky="w", padx=5, pady=2)
 
-            unit_lbl = ttk.Label(frame, text=unit, foreground="gray", width=6)
+            unit_lbl = ttk.Label(frame, text=unit, foreground="grey", width=6)
             unit_lbl.grid(row=i, column=2, sticky="w", pady=2)
 
             self.constraint_vars[key] = var
@@ -392,7 +392,7 @@ class BatteryOptimiserPanel(ttk.Frame):
         self.power_limit_entry.pack(side="left", padx=5)
 
         self.power_limit_unit = ttk.Label(
-            self.power_limit_single_frame, text="kW", foreground="gray", width=6
+            self.power_limit_single_frame, text="kW", foreground="grey", width=6
         )
         self.power_limit_unit.pack(side="left")
 
@@ -429,7 +429,7 @@ class BatteryOptimiserPanel(ttk.Frame):
             textvariable=self.power_sweep_vars["step"],
             width=4,
         ).pack(side="left")
-        ttk.Label(self.power_limit_sweep_frame, text=" kW", foreground="gray").pack(
+        ttk.Label(self.power_limit_sweep_frame, text=" kW", foreground="grey").pack(
             side="left"
         )
 
@@ -463,7 +463,7 @@ class BatteryOptimiserPanel(ttk.Frame):
         # Status label
         self.status_var = tk.StringVar(value="Ready")
         self.status_label = ttk.Label(
-            btn_frame, textvariable=self.status_var, foreground="gray"
+            btn_frame, textvariable=self.status_var, foreground="grey"
         )
         self.status_label.pack(pady=(5, 0))
 
@@ -616,8 +616,8 @@ class BatteryOptimiserPanel(ttk.Frame):
             self.power_limit_sweep_frame.grid_remove()
             self.power_limit_single_frame.grid()
             self.power_limit_entry.configure(state="disabled")
-            self.power_limit_label.configure(foreground="gray")
-            self.power_limit_unit.configure(foreground="gray")
+            self.power_limit_label.configure(foreground="grey")
+            self.power_limit_unit.configure(foreground="grey")
 
         # Update config count when toggling
         self._update_config_count()
@@ -892,6 +892,7 @@ class BatteryOptimiserPanel(ttk.Frame):
                 BatteryParams,
                 VehicleGeometry,
                 TorqueVectoringParams,
+                build_aero_from_config,
             )
             from solver.qss_speed import solve_qss
             from solver.battery import validate_battery_capacity
@@ -908,12 +909,7 @@ class BatteryOptimiserPanel(ttk.Frame):
             total_mass = mass_without_battery + pack_mass
 
             # Create vehicle
-            aero = AeroParams(
-                rho=base_config["aero"]["rho"],
-                Cd=base_config["aero"]["Cd"],
-                Cl=base_config["aero"]["Cl"],
-                A=base_config["aero"]["A"],
-            )
+            aero = build_aero_from_config(base_config["aero"])
 
             tyre = TyreParamsMVP(mu=base_config["tyre"]["mu"])
 

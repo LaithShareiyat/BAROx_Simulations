@@ -119,7 +119,7 @@ def solve_qss_bicycle(vehicle: VehicleParams,
     C_f, C_r = vehicle.get_cornering_stiffness()
 
     # Calculate axle loads with longitudinal weight transfer
-    F_zf, F_zr = calculate_axle_loads(vehicle, a_x)
+    F_zf, F_zr = calculate_axle_loads(vehicle, a_x, V)
 
     # Kinematic relationships
     r = V * kappa                    # Yaw rate from path curvature
