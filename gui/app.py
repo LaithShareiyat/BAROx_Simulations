@@ -876,8 +876,11 @@ class BAROxGUI:
         lines.append(f"Rolling Resistance (Crr): {config['vehicle']['Crr']}")
         lines.append(f"Air Density: {config['aero']['rho']} kg/m³")
         lines.append(f"Drag Coefficient (Cd): {config['aero']['Cd']}")
-        lines.append(f"Lift Coefficient (Cl): {config['aero']['Cl']}")
-        lines.append(f"Frontal Area: {config['aero']['A']} m²")
+        lines.append(f"Front Lift Coeff (Cl_f): {config['aero'].get('Cl_f', '—')}")
+        lines.append(f"Rear Lift Coeff (Cl_r): {config['aero'].get('Cl_r', '—')}")
+        lines.append(f"Drag Ref Area: {config['aero']['A']} m²")
+        lines.append(f"Front Eff. Area: {config['aero'].get('A_f', config['aero']['A'])} m²")
+        lines.append(f"Rear Eff. Area: {config['aero'].get('A_r', config['aero']['A'])} m²")
         tyre_model = config['tyre'].get('model', 'simple')
         if tyre_model == 'pacejka':
             pac = config['tyre'].get('pacejka', {})

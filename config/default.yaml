@@ -15,7 +15,9 @@ aero:
   Cd: 1.1     # Drag coefficient [-]
   Cl_f: 0.75  # Front lift coefficient [-] (downforce positive)
   Cl_r: 0.75  # Rear lift coefficient [-] (downforce positive)
-  A: 1.0      # Frontal area [m²]
+  A: 1.0      # Drag reference area [m²]
+  A_f: 1.0    # Front effective area [m²] (downforce)
+  A_r: 1.0    # Rear effective area [m²] (downforce)
 
 tyre:
   model: pacejka           # "simple" or "pacejka"
