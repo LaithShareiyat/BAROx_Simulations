@@ -60,7 +60,8 @@ def refine_track(track: Track, min_points: int = 500) -> Track:
 
 def solve_qss(track: Track, vehicle: VehicleParams,
               refine: bool = False, min_points: int = 500,
-              use_bicycle_model: bool = True) -> tuple[dict, float]:
+              use_bicycle_model: bool = True,
+              grip_scale=None) -> tuple[dict, float]:
     """
     Quasi-Steady-State lap time solver.
 
@@ -78,6 +79,7 @@ def solve_qss(track: Track, vehicle: VehicleParams,
         refine: If True, interpolate track to finer resolution for accuracy
         min_points: Minimum points when refining (default 500)
         use_bicycle_model: If True, use bicycle model for grip calculations
+        grip_scale: Per-point thermal grip multiplier array [0-1], or None
 
     Returns:
         result: {"v": velocity array, "v_lat": lateral limit, ...}
@@ -121,11 +123,12 @@ def solve_qss(track: Track, vehicle: VehicleParams,
     for i in range(n):
         v_guess = 50.0  # Initial guess [m/s]
         kappa_i = abs(track.kappa[i])
+        gs_i = grip_scale[i] if grip_scale is not None else 1.0
 
         # Iterate because downforce depends on speed
         for _ in range(10):
             Fdown = downforce(vehicle.aero.rho, vehicle.aero.CL_A, v_guess)
-            amax = a_max_from_tyre(vehicle.tyre, g, m, Fdown)
+            amax = a_max_from_tyre(vehicle.tyre, g, m, Fdown, grip_scale=gs_i)
 
             # Apply torque vectoring lateral benefit if enabled
             if has_tv and kappa_i > 1e-6:
@@ -186,12 +189,13 @@ def solve_qss(track: Track, vehicle: VehicleParams,
     
     # Pre-compute maximum braking capability for look-ahead
     # This helps determine if we can reach a speed and still brake to v_lat
-    def max_entry_speed(v_exit: float, ds: float, v_for_aero: float) -> float:
+    def max_entry_speed(v_exit: float, ds: float, v_for_aero: float,
+                        gs: float = 1.0) -> float:
         """Calculate maximum entry speed to brake down to v_exit over distance ds."""
         Fdown = downforce(vehicle.aero.rho, vehicle.aero.CL_A, v_for_aero)
         Fdrag = drag(vehicle.aero.rho, vehicle.aero.CD_A, v_for_aero)
         Frr = rolling_resistance(vehicle.Crr, m, g)
-        amax = a_max_from_tyre(vehicle.tyre, g, m, Fdown)
+        amax = a_max_from_tyre(vehicle.tyre, g, m, Fdown, grip_scale=gs)
         # Assume we use full grip for braking (no lateral accel during pure braking)
         ax_brake = amax + (Fdrag + Frr) / m
         # v_entry² = v_exit² + 2 * a_brake * ds
@@ -201,6 +205,7 @@ def solve_qss(track: Track, vehicle: VehicleParams,
     for i in range(n - 1):
         v_i = v_fwd[i]
         ds = track.ds[i]
+        gs_i = grip_scale[i] if grip_scale is not None else 1.0
 
         # Current forces
         Fdown = downforce(vehicle.aero.rho, vehicle.aero.CL_A, v_i)
@@ -217,11 +222,12 @@ def solve_qss(track: Track, vehicle: VehicleParams,
                 tv_output = calculate_tv_yaw_moment(vehicle, ay, a_x=1.0)
                 M_z_tv = tv_output.M_z
             ax_grip = ax_traction_axle_aware(
-                mu, vehicle, v_i, abs(track.kappa[i]), Fdown, M_z_tv
+                mu, vehicle, v_i, abs(track.kappa[i]), Fdown, M_z_tv,
+                grip_scale=gs_i
             )
         else:
             # Fallback: original point-mass friction circle
-            amax = a_max_from_tyre(vehicle.tyre, g, m, Fdown)
+            amax = a_max_from_tyre(vehicle.tyre, g, m, Fdown, grip_scale=gs_i)
             if has_tv and ay > 0.1:
                 tv_traction_mult = calculate_tv_traction_benefit(vehicle, ay, a_x=1.0)
                 amax = amax * tv_traction_mult
@@ -252,7 +258,8 @@ def solve_qss(track: Track, vehicle: VehicleParams,
             v_lat_ahead = v_lat[j]
             
             # What's the max speed we can have NOW and still brake to v_lat_ahead?
-            v_max_entry = max_entry_speed(v_lat_ahead, lookahead_distance, v_i)
+            gs_j = grip_scale[j] if grip_scale is not None else 1.0
+            v_max_entry = max_entry_speed(v_lat_ahead, lookahead_distance, v_i, gs=gs_j)
             v_max_lookahead = min(v_max_lookahead, v_max_entry)
         
         # Final speed is minimum of kinematic result, lateral limit, and look-ahead
@@ -276,6 +283,7 @@ def solve_qss(track: Track, vehicle: VehicleParams,
         ds = track.ds[i]
         Frr = rolling_resistance(vehicle.Crr, m, g)
         kappa_entry = abs(track.kappa[i])
+        gs_i = grip_scale[i] if grip_scale is not None else 1.0
 
         # Predictor-corrector: first estimate uses exit speed, then
         # re-evaluate at the higher entry speed for a better result.
@@ -288,10 +296,11 @@ def solve_qss(track: Track, vehicle: VehicleParams,
             ay = v_est**2 * kappa_entry
             if use_bicycle and vehicle.has_extended_powertrain:
                 ax_grip = ax_braking_axle_aware(
-                    mu, vehicle, v_est, kappa_entry, Fdown
+                    mu, vehicle, v_est, kappa_entry, Fdown,
+                    grip_scale=gs_i
                 )
             else:
-                amax_val = a_max_from_tyre(vehicle.tyre, g, m, Fdown)
+                amax_val = a_max_from_tyre(vehicle.tyre, g, m, Fdown, grip_scale=gs_i)
                 ax_grip = ax_available(amax_val, ay)
 
             # Deceleration (braking adds to drag/rr)

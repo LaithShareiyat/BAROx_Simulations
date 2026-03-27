@@ -371,6 +371,7 @@ class BAROxGUI:
             BatteryParams,
             VehicleGeometry,
             TorqueVectoringParams,
+            TyreThermalParams,
             build_tyre_from_config,
             build_aero_from_config,
         )
@@ -447,6 +448,26 @@ class BAROxGUI:
                 strategy=tv_config.get("strategy", "load_proportional"),
             )
 
+        # Create tyre thermal params if present
+        tyre_thermal = None
+        if "tyre_thermal" in config:
+            tt = config["tyre_thermal"]
+            if tt.get("enabled", False):
+                tyre_thermal = TyreThermalParams(
+                    enabled=True,
+                    T_ambient=float(tt.get("T_ambient", 25.0)),
+                    T_initial=float(tt.get("T_initial", 25.0)),
+                    T_opt=float(tt.get("T_opt", 80.0)),
+                    T_width=float(tt.get("T_width", 60.0)),
+                    C_thermal=float(tt.get("C_thermal", 5000.0)),
+                    k_heating=float(tt.get("k_heating", 0.08)),
+                    h_static=float(tt.get("h_static", 10.0)),
+                    h_speed=float(tt.get("h_speed", 1.5)),
+                    max_thermal_iter=int(tt.get("max_thermal_iter", 5)),
+                    thermal_tol=float(tt.get("thermal_tol", 1.0)),
+                    relaxation=float(tt.get("relaxation", 0.7)),
+                )
+
         return VehicleParams(
             m=config["vehicle"]["mass_kg"],
             g=config["vehicle"]["g"],
@@ -457,6 +478,7 @@ class BAROxGUI:
             battery=battery,
             geometry=geometry,
             torque_vectoring=torque_vectoring,
+            tyre_thermal=tyre_thermal,
         )
 
     def _run_autocross(self, vehicle, config: dict) -> dict:
@@ -471,8 +493,12 @@ class BAROxGUI:
         # Build track
         track, metadata = build_standard_autocross()
 
-        # Solve for velocity profile
-        result, t_lap = solve_qss(track, vehicle)
+        # Solve for velocity profile (thermal or standard)
+        if vehicle.has_tyre_thermal:
+            from solver.tyre_thermal import solve_qss_thermal
+            result, t_lap = solve_qss_thermal(track, vehicle)
+        else:
+            result, t_lap = solve_qss(track, vehicle)
         v = result["v"]
 
         # Compute metrics
@@ -497,6 +523,10 @@ class BAROxGUI:
         # Always include vehicle for power demand and sweep plots
         metrics["vehicle"] = vehicle
 
+        # Tyre thermal state
+        if "thermal_state" in result:
+            metrics["thermal_state"] = result["thermal_state"]
+
         # Battery analysis
         if vehicle.battery is not None:
             battery_validation = validate_battery_capacity(track, v, vehicle)
@@ -520,8 +550,12 @@ class BAROxGUI:
         # Build track
         track = build_skidpad_track()
 
-        # Solve
-        result, t_lap = solve_qss(track, vehicle)
+        # Solve (thermal or standard)
+        if vehicle.has_tyre_thermal:
+            from solver.tyre_thermal import solve_qss_thermal
+            result, t_lap = solve_qss_thermal(track, vehicle)
+        else:
+            result, t_lap = solve_qss(track, vehicle)
         v = result["v"]
 
         # Get timing
@@ -544,6 +578,10 @@ class BAROxGUI:
 
         # Always include vehicle for power demand plots
         metrics["vehicle"] = vehicle
+
+        # Tyre thermal state
+        if "thermal_state" in result:
+            metrics["thermal_state"] = result["thermal_state"]
 
         # Battery analysis (same as autocross)
         if vehicle.battery is not None:
@@ -742,6 +780,9 @@ class BAROxGUI:
         # Update battery plot (for both events)
         self.results_panel.update_battery_combined_plot(autocross_data, skidpad_data)
 
+        # Update tyre thermal plot
+        self.results_panel.update_tyre_thermal_plot(autocross_data, skidpad_data)
+
         # Show results tab
         self.results_panel.show_tab("results")
 
@@ -811,6 +852,7 @@ class BAROxGUI:
                 (self.results_panel.power_demand_canvas, "power_demand.png"),
                 (self.results_panel.gear_ratio_sweep_canvas, "gear_ratio_sweep.png"),
                 (self.results_panel.battery_canvas, "battery_analysis.png"),
+                (self.results_panel.tyre_thermal_canvas, "tyre_thermal.png"),
             ]
 
             # Add config comparison chart if it exists

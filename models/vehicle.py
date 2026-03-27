@@ -171,6 +171,30 @@ class TorqueVectoringParams:
 
 
 @dataclass(frozen=True)
+class TyreThermalParams:
+    """Tyre thermal model parameters (single-node lumped model).
+
+    Energy balance:
+        C_thermal * dT/dt = k_heating * |F| * V_slip - h_cool(V) * (T - T_ambient)
+
+    Grip scaling (parabolic window):
+        grip_mult = max(0, 1 - ((T - T_opt) / T_width)^2)
+    """
+    enabled: bool = False
+    T_ambient: float = 25.0       # [degC] ambient air temperature
+    T_initial: float = 60.0       # [degC] tyre starting temperature (post warm-up)
+    T_opt: float = 80.0           # [degC] optimal grip temperature
+    T_width: float = 60.0         # [degC] half-width of grip window
+    C_thermal: float = 5000.0     # [J/K] tyre thermal capacitance
+    k_heating: float = 0.08       # [-] fraction of slip power to heat
+    h_static: float = 10.0        # [W/K] static cooling coefficient
+    h_speed: float = 1.5          # [W·s/(K·m)] speed-dependent cooling
+    max_thermal_iter: int = 5     # outer iteration limit
+    thermal_tol: float = 1.0      # [degC] convergence tolerance
+    relaxation: float = 0.7       # under-relaxation factor
+
+
+@dataclass(frozen=True)
 class EVPowertrainMVP:
     """Legacy powertrain model - kept for backward compatibility."""
 
@@ -364,6 +388,12 @@ class VehicleParams:
     battery: BatteryParams = None  # Optional battery params
     geometry: VehicleGeometry = None  # Optional geometry for bicycle model
     torque_vectoring: TorqueVectoringParams = None  # Optional TV params
+    tyre_thermal: TyreThermalParams = None  # Optional tyre thermal model
+
+    @property
+    def has_tyre_thermal(self) -> bool:
+        """Check if tyre thermal model is enabled."""
+        return self.tyre_thermal is not None and self.tyre_thermal.enabled
 
     @property
     def has_extended_powertrain(self) -> bool:

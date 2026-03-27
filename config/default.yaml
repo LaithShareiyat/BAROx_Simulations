@@ -109,6 +109,21 @@ battery:
   max_regen_kW: 50        # Maximum charging power during regen [kW]
   regen_capture_percent: 100  # % of braking using regen vs friction brakes [0-100]
 
+# Tyre thermal model
+tyre_thermal:
+  enabled: false
+  T_ambient: 25.0           # Ambient temperature [degC]
+  T_initial: 60.0           # Tyre starting temperature [degC] (post warm-up)
+  T_opt: 80.0               # Optimal grip temperature [degC]
+  T_width: 60.0             # Grip window half-width [degC]
+  C_thermal: 5000.0         # Thermal capacitance [J/K]
+  k_heating: 0.08           # Slip-to-heat fraction [-]
+  h_static: 10.0            # Static cooling [W/K]
+  h_speed: 1.5              # Speed-dependent cooling [W*s/(K*m)]
+  max_thermal_iter: 5       # Outer iteration limit
+  thermal_tol: 1.0          # Convergence tolerance [degC]
+  relaxation: 0.7           # Under-relaxation factor
+
 # Torque vectoring system
 torque_vectoring:
   enabled: false              # Enable torque vectoring (requires RWD or AWD)
