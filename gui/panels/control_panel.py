@@ -309,6 +309,9 @@ class ControlPanel(ttk.Frame):
         # Battery parameters with enable checkbox
         self._create_battery_section()
 
+        # Tyre thermal model
+        self._create_tyre_thermal_section()
+
         # Simulation options (gear ratio sweep toggle, etc.)
         self._create_simulation_options_section()
 
@@ -1666,6 +1669,79 @@ class ControlPanel(ttk.Frame):
             if isinstance(widget, ttk.Entry):
                 widget.configure(state=state)
 
+    def _create_tyre_thermal_section(self):
+        """Create tyre thermal model section with enable checkbox."""
+        frame = ttk.LabelFrame(
+            self.scrollable_frame, text="TYRE THERMAL", padding=(10, 5)
+        )
+        frame.pack(fill="x", padx=10, pady=5)
+        self.tyre_thermal_frame = frame
+
+        defaults = self.default_config.get("tyre_thermal", {})
+
+        # Enable checkbox
+        self.tyre_thermal_enabled = tk.BooleanVar(
+            value=defaults.get("enabled", False)
+        )
+        self.tyre_thermal_checkbox = ttk.Checkbutton(
+            frame,
+            text="Enable Tyre Thermal Model",
+            variable=self.tyre_thermal_enabled,
+            command=self._update_tyre_thermal_state,
+        )
+        self.tyre_thermal_checkbox.grid(
+            row=0, column=0, columnspan=3, sticky="w", padx=5, pady=5
+        )
+
+        # Thermal parameters
+        self.param_entries["tyre_thermal"] = {}
+        self.tyre_thermal_widgets = []
+
+        thermal_params = [
+            ("T_ambient", "Ambient Temp", "degC"),
+            ("T_initial", "Initial Temp", "degC"),
+            ("T_opt", "Optimal Temp", "degC"),
+            ("T_width", "Grip Window", "degC"),
+            ("C_thermal", "Thermal Cap.", "J/K"),
+            ("k_heating", "Heat Fraction", ""),
+            ("h_static", "Static Cooling", "W/K"),
+            ("h_speed", "Speed Cooling", "W*s/K/m"),
+        ]
+
+        for i, (key, label, unit) in enumerate(thermal_params):
+            default_val = defaults.get(key, 0)
+            param_row = i + 1
+
+            lbl = ttk.Label(frame, text=label, width=16, anchor="w")
+            lbl.grid(row=param_row, column=0, sticky="w", padx=5, pady=2)
+            self.tyre_thermal_widgets.append(lbl)
+
+            var = tk.StringVar(value=str(default_val))
+            entry = ttk.Entry(frame, textvariable=var, width=10)
+            entry.grid(row=param_row, column=1, sticky="w", padx=5, pady=2)
+            self.tyre_thermal_widgets.append(entry)
+
+            if unit:
+                unit_lbl = ttk.Label(
+                    frame, text=unit, style="Unit.TLabel", width=8
+                )
+                unit_lbl.grid(row=param_row, column=2, sticky="w", pady=2)
+                self.tyre_thermal_widgets.append(unit_lbl)
+
+            self.param_entries["tyre_thermal"][key] = var
+
+        # Initially update state
+        self._update_tyre_thermal_state()
+
+    def _update_tyre_thermal_state(self):
+        """Enable/disable tyre thermal parameter entries."""
+        is_custom = self.config_var.get() == "custom"
+        enabled = self.tyre_thermal_enabled.get()
+        state = "normal" if (is_custom and enabled) else "disabled"
+        for widget in self.tyre_thermal_widgets:
+            if isinstance(widget, ttk.Entry):
+                widget.configure(state=state)
+
     def _create_simulation_options_section(self):
         """Create simulation options section with gear ratio sweep toggle."""
         frame = ttk.LabelFrame(
@@ -1842,6 +1918,11 @@ class ControlPanel(ttk.Frame):
             self.tv_checkbox.configure(state=state)
             self._update_tv_state()
 
+        # Update tyre thermal widgets
+        if hasattr(self, "tyre_thermal_checkbox"):
+            self.tyre_thermal_checkbox.configure(state=state)
+            self._update_tyre_thermal_state()
+
         # Update gear ratio sweep checkbox
         if hasattr(self, "gear_sweep_checkbox"):
             self.gear_sweep_checkbox.configure(state=state)
@@ -2014,6 +2095,13 @@ class ControlPanel(ttk.Frame):
                 self.regen_enabled.set(config["battery"].get("regen_enabled", False))
             self._update_battery_state()
 
+        # Handle tyre thermal enabled state
+        if "tyre_thermal" in config and hasattr(self, "tyre_thermal_enabled"):
+            self.tyre_thermal_enabled.set(
+                config["tyre_thermal"].get("enabled", False)
+            )
+            self._update_tyre_thermal_state()
+
         # Handle simulation options
         if "simulation_options" in config and hasattr(self, "gear_sweep_enabled"):
             self.gear_sweep_enabled.set(
@@ -2129,6 +2217,12 @@ class ControlPanel(ttk.Frame):
             if "torque_vectoring" not in config:
                 config["torque_vectoring"] = {}
             config["torque_vectoring"]["enabled"] = self.tv_enabled.get()
+
+        # Add tyre thermal enabled flag
+        if hasattr(self, "tyre_thermal_enabled"):
+            if "tyre_thermal" not in config:
+                config["tyre_thermal"] = {}
+            config["tyre_thermal"]["enabled"] = self.tyre_thermal_enabled.get()
 
         # Add simulation options
         config["simulation_options"] = {

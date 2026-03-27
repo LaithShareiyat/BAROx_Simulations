@@ -70,6 +70,7 @@ class ResultsPanel(ttk.Frame):
         self._create_power_demand_tab()
         self._create_gear_ratio_sweep_tab()
         self._create_battery_tab()
+        self._create_tyre_thermal_tab()
         self._create_battery_optimiser_tab()
         self._create_config_comparison_tab()
 
@@ -270,6 +271,18 @@ class ResultsPanel(ttk.Frame):
 
         self.battery_canvas = PlotCanvas(self.battery_frame, figsize=(10, 8))
         self.battery_canvas.pack(fill="both", expand=True)
+
+    def _create_tyre_thermal_tab(self):
+        """Create the tyre thermal analysis tab."""
+        self.tyre_thermal_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.tyre_thermal_frame, text="Tyre Thermal")
+
+        from ..widgets.plot_canvas import PlotCanvas
+
+        self.tyre_thermal_canvas = PlotCanvas(
+            self.tyre_thermal_frame, figsize=(10, 8)
+        )
+        self.tyre_thermal_canvas.pack(fill="both", expand=True)
 
     def _create_battery_optimiser_tab(self):
         """Create the battery pack optimiser tab."""
@@ -1556,6 +1569,92 @@ class ResultsPanel(ttk.Frame):
             return fig.add_subplot(111), None
         else:
             return None, fig.add_subplot(111)
+
+    def update_tyre_thermal_plot(
+        self, autocross_data: dict = None, skidpad_data: dict = None
+    ):
+        """Update the tyre thermal analysis plot."""
+        fig = self.tyre_thermal_canvas.get_figure()
+        fig.clear()
+        colours = self._get_plot_colours()
+        self._style_figure(fig, colours)
+
+        has_autocross = autocross_data is not None and "thermal_state" in autocross_data
+        has_skidpad = skidpad_data is not None and "thermal_state" in skidpad_data
+
+        if not has_autocross and not has_skidpad:
+            ax = fig.add_subplot(111)
+            self._style_axes(ax, colours)
+            ax.text(
+                0.5, 0.5,
+                "No thermal data available\n(Tyre thermal model disabled)",
+                ha="center", va="center", fontsize=12,
+                color=colours["text"], alpha=0.5,
+                transform=ax.transAxes,
+            )
+            self.tyre_thermal_canvas.draw()
+            return
+
+        n_events = int(has_autocross) + int(has_skidpad)
+        datasets = []
+        if has_autocross:
+            datasets.append(("Autocross", autocross_data))
+        if has_skidpad:
+            datasets.append(("Skidpad", skidpad_data))
+
+        for col, (event_name, data) in enumerate(datasets):
+            track = data["track"]
+            ts = data["thermal_state"]
+            s = track.s
+
+            # Row 1: Temperature vs Distance
+            ax1 = fig.add_subplot(3, n_events, col + 1)
+            self._style_axes(ax1, colours)
+            ax1.plot(s, ts.temperature, color="#D04040", linewidth=1.5)
+            vehicle = data.get("vehicle")
+            if vehicle and vehicle.tyre_thermal:
+                ax1.axhline(
+                    vehicle.tyre_thermal.T_opt, color="#4CAF50",
+                    linewidth=1, linestyle=":", alpha=0.7,
+                    label=f"T_opt = {vehicle.tyre_thermal.T_opt} degC",
+                )
+                ax1.axhline(
+                    vehicle.tyre_thermal.T_ambient, color="#2196F3",
+                    linewidth=1, linestyle=":", alpha=0.7,
+                    label=f"T_ambient = {vehicle.tyre_thermal.T_ambient} degC",
+                )
+            ax1.set_ylabel("Temperature [degC]", fontsize=10)
+            ax1.set_title(f"{event_name}: Tyre Temperature", fontsize=11,
+                          fontweight="bold")
+            ax1.legend(fontsize=8)
+            ax1.grid(True, alpha=0.3)
+
+            # Row 2: Grip Multiplier vs Distance
+            ax2 = fig.add_subplot(3, n_events, n_events + col + 1)
+            self._style_axes(ax2, colours)
+            ax2.plot(s, ts.grip_multiplier, color="#FF9800", linewidth=1.5)
+            ax2.set_ylabel("Grip Multiplier [-]", fontsize=10)
+            ax2.set_ylim(-0.05, 1.1)
+            ax2.set_title(f"{event_name}: Grip Scaling", fontsize=11,
+                          fontweight="bold")
+            ax2.grid(True, alpha=0.3)
+
+            # Row 3: Heat Balance vs Distance
+            ax3 = fig.add_subplot(3, n_events, 2 * n_events + col + 1)
+            self._style_axes(ax3, colours)
+            ax3.plot(s, ts.heat_input_kW, color="#D04040", linewidth=1.5,
+                     label="Heat In")
+            ax3.plot(s, ts.cooling_kW, color="#2196F3", linewidth=1.5,
+                     label="Cooling")
+            ax3.set_xlabel("Distance [m]", fontsize=10)
+            ax3.set_ylabel("Power [kW]", fontsize=10)
+            ax3.set_title(f"{event_name}: Heat Balance", fontsize=11,
+                          fontweight="bold")
+            ax3.legend(fontsize=8)
+            ax3.grid(True, alpha=0.3)
+
+        fig.tight_layout()
+        self.tyre_thermal_canvas.draw()
 
     def update_battery_combined_plot(
         self, autocross_data: dict = None, skidpad_data: dict = None

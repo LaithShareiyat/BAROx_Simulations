@@ -67,6 +67,28 @@ def ax_available(a_max_val: float, ay: float) -> float:
 
 
 # ═══════════════════════════════════════════════════════════════════
+# Thermal grip scaling
+# ═══════════════════════════════════════════════════════════════════
+
+def thermal_grip_multiplier(T: float, T_opt: float, T_width: float) -> float:
+    """Temperature-dependent grip scaling factor [0, 1].
+
+    Parabolic window centred on T_opt:
+        grip = max(0, 1 - ((T - T_opt) / T_width)^2)
+
+    Args:
+        T: Current tyre temperature [degC]
+        T_opt: Optimal temperature for peak grip [degC]
+        T_width: Half-width of grip window [degC]
+
+    Returns:
+        Grip multiplier in [0, 1]
+    """
+    dT = T - T_opt
+    return max(0.0, 1.0 - (dT / T_width) ** 2)
+
+
+# ═══════════════════════════════════════════════════════════════════
 # Pacejka Magic Formula
 # ═══════════════════════════════════════════════════════════════════
 
@@ -265,7 +287,8 @@ def _find_alpha_for_Fy(Fy_target: float, Fz: float,
 # Tyre model abstraction layer
 # ═══════════════════════════════════════════════════════════════════
 
-def max_lateral_force(tyre, Fz: float, n_tyres: int = 1) -> float:
+def max_lateral_force(tyre, Fz: float, n_tyres: int = 1,
+                      grip_scale: float = 1.0) -> float:
     """Maximum lateral force at given vertical load [N].
 
     For constant-mu: F_y_max = mu * Fz
@@ -279,6 +302,7 @@ def max_lateral_force(tyre, Fz: float, n_tyres: int = 1) -> float:
         Fz: Total vertical load on this group of tyres [N]
         n_tyres: Number of tyres sharing this load (1=per-tyre,
                  2=per-axle, 4=whole vehicle)
+        grip_scale: Thermal grip multiplier [0-1]
 
     Returns:
         Maximum lateral force [N] (sum across all n_tyres)
@@ -286,11 +310,12 @@ def max_lateral_force(tyre, Fz: float, n_tyres: int = 1) -> float:
     if isinstance(tyre, PacejkaParams):
         Fz_per = Fz / max(n_tyres, 1)
         D_per = (tyre.lateral.a1 * Fz_per + tyre.lateral.a2) * Fz_per
-        return n_tyres * abs(D_per)
-    return tyre.mu * Fz
+        return n_tyres * abs(D_per) * grip_scale
+    return tyre.mu * grip_scale * Fz
 
 
-def max_longitudinal_force(tyre, Fz: float, n_tyres: int = 1) -> float:
+def max_longitudinal_force(tyre, Fz: float, n_tyres: int = 1,
+                           grip_scale: float = 1.0) -> float:
     """Maximum longitudinal force at given vertical load [N].
 
     For constant-mu: F_x_max = mu * Fz
@@ -302,6 +327,7 @@ def max_longitudinal_force(tyre, Fz: float, n_tyres: int = 1) -> float:
         Fz: Total vertical load on this group of tyres [N]
         n_tyres: Number of tyres sharing this load (1=per-tyre,
                  2=per-axle, 4=whole vehicle)
+        grip_scale: Thermal grip multiplier [0-1]
 
     Returns:
         Maximum longitudinal force [N] (sum across all n_tyres)
@@ -309,12 +335,13 @@ def max_longitudinal_force(tyre, Fz: float, n_tyres: int = 1) -> float:
     if isinstance(tyre, PacejkaParams):
         Fz_per = Fz / max(n_tyres, 1)
         D_per = (tyre.longitudinal.a1 * Fz_per + tyre.longitudinal.a2) * Fz_per
-        return n_tyres * abs(D_per)
-    return tyre.mu * Fz
+        return n_tyres * abs(D_per) * grip_scale
+    return tyre.mu * grip_scale * Fz
 
 
 def available_longitudinal_force(tyre, Fz: float, Fy_required: float,
-                                  n_tyres: int = 1) -> float:
+                                  n_tyres: int = 1,
+                                  grip_scale: float = 1.0) -> float:
     """Available longitudinal force given a required lateral force [N].
 
     For constant-mu: friction circle sqrt((mu*Fz)^2 - Fy^2)
@@ -328,6 +355,7 @@ def available_longitudinal_force(tyre, Fz: float, Fy_required: float,
         Fy_required: Total required lateral force [N] (absolute value used)
         n_tyres: Number of tyres sharing this load (1=per-tyre,
                  2=per-axle, 4=whole vehicle)
+        grip_scale: Thermal grip multiplier [0-1]
 
     Returns:
         Maximum available longitudinal force [N] (sum across all n_tyres)
@@ -344,14 +372,14 @@ def available_longitudinal_force(tyre, Fz: float, Fy_required: float,
         # Find slip angle needed for the per-tyre lateral force
         alpha = _find_alpha_for_Fy(Fy_per, Fz_per, tyre.lateral)
 
-        # Check if laterally saturated (per-tyre)
-        Fy_peak_per = abs((tyre.lateral.a1 * Fz_per + tyre.lateral.a2) * Fz_per)
+        # Check if laterally saturated (per-tyre), accounting for grip_scale
+        Fy_peak_per = abs((tyre.lateral.a1 * Fz_per + tyre.lateral.a2) * Fz_per) * grip_scale
         if Fy_per >= Fy_peak_per:
             return 0.0
 
         # Peak longitudinal force per tyre at this Fz
         D_lon_per = (tyre.longitudinal.a1 * Fz_per + tyre.longitudinal.a2) * Fz_per
-        Fx_peak_per = abs(D_lon_per)
+        Fx_peak_per = abs(D_lon_per) * grip_scale
 
         # Combined slip reduction: G_xa reduces Fx when alpha is nonzero
         G_xa = math.cos(tyre.C_xa * math.atan(tyre.B_xa * alpha))
@@ -360,13 +388,14 @@ def available_longitudinal_force(tyre, Fz: float, Fy_required: float,
         return n_tyres * Fx_per
     else:
         # Constant-mu friction circle (linear — n_tyres doesn't affect result)
-        F_max = tyre.mu * Fz
+        F_max = tyre.mu * grip_scale * Fz
         if Fy_abs >= F_max:
             return 0.0
         return math.sqrt(F_max**2 - Fy_abs**2)
 
 
-def a_max_from_tyre(tyre, g: float, m: float, downforce: float = 0.0) -> float:
+def a_max_from_tyre(tyre, g: float, m: float, downforce: float = 0.0,
+                    grip_scale: float = 1.0) -> float:
     """Maximum acceleration (friction circle radius) [m/s²].
 
     Drop-in replacement for a_max(mu, g, m, Fdown).
@@ -379,19 +408,21 @@ def a_max_from_tyre(tyre, g: float, m: float, downforce: float = 0.0) -> float:
         g: Gravitational acceleration [m/s²]
         m: Vehicle mass [kg]
         downforce: Aerodynamic downforce [N]
+        grip_scale: Thermal grip multiplier [0-1]
 
     Returns:
         Maximum total acceleration [m/s²]
     """
     Fz = m * g + downforce
-    return max_lateral_force(tyre, Fz, n_tyres=4) / m
+    return max_lateral_force(tyre, Fz, n_tyres=4, grip_scale=grip_scale) / m
 
 
 # ═══════════════════════════════════════════════════════════════════
 # Axle-aware grip (updated for Pacejka abstraction)
 # ═══════════════════════════════════════════════════════════════════
 
-def ax_traction_axle_aware(mu, vehicle, V, kappa, Fdown, M_z_tv=0.0):
+def ax_traction_axle_aware(mu, vehicle, V, kappa, Fdown, M_z_tv=0.0,
+                           grip_scale=1.0):
     """
     Maximum traction acceleration with axle-aware grip [m/s²].
 
@@ -410,6 +441,7 @@ def ax_traction_axle_aware(mu, vehicle, V, kappa, Fdown, M_z_tv=0.0):
         kappa: Absolute path curvature [1/m]
         Fdown: Total aerodynamic downforce [N]
         M_z_tv: Torque vectoring yaw moment [Nm]
+        grip_scale: Thermal grip multiplier [0-1]
 
     Returns:
         Maximum traction acceleration [m/s²]
@@ -450,12 +482,16 @@ def ax_traction_axle_aware(mu, vehicle, V, kappa, Fdown, M_z_tv=0.0):
         F_zr = max(0.0, W_r_static + dW)  # Rear loads up under accel
 
         if driven == 'rear':
-            F_x_max = available_longitudinal_force(tyre, F_zr, F_yr, n_tyres=2)
+            F_x_max = available_longitudinal_force(tyre, F_zr, F_yr, n_tyres=2,
+                                                   grip_scale=grip_scale)
         elif driven == 'front':
-            F_x_max = available_longitudinal_force(tyre, F_zf, F_yf, n_tyres=2)
+            F_x_max = available_longitudinal_force(tyre, F_zf, F_yf, n_tyres=2,
+                                                   grip_scale=grip_scale)
         else:  # 'both' (AWD)
-            F_x_f = available_longitudinal_force(tyre, F_zf, F_yf, n_tyres=2)
-            F_x_r = available_longitudinal_force(tyre, F_zr, F_yr, n_tyres=2)
+            F_x_f = available_longitudinal_force(tyre, F_zf, F_yf, n_tyres=2,
+                                                 grip_scale=grip_scale)
+            F_x_r = available_longitudinal_force(tyre, F_zr, F_yr, n_tyres=2,
+                                                 grip_scale=grip_scale)
             F_x_max = F_x_f + F_x_r
 
         a_x = F_x_max / m
@@ -467,7 +503,8 @@ def ax_traction_axle_aware(mu, vehicle, V, kappa, Fdown, M_z_tv=0.0):
     return a_x
 
 
-def ax_braking_axle_aware(mu, vehicle, V, kappa, Fdown, M_z_tv=0.0):
+def ax_braking_axle_aware(mu, vehicle, V, kappa, Fdown, M_z_tv=0.0,
+                          grip_scale=1.0):
     """
     Maximum braking deceleration with axle-aware grip [m/s²].
 
@@ -481,6 +518,7 @@ def ax_braking_axle_aware(mu, vehicle, V, kappa, Fdown, M_z_tv=0.0):
         kappa: Absolute path curvature [1/m]
         Fdown: Total aerodynamic downforce [N]
         M_z_tv: Torque vectoring yaw moment [Nm]
+        grip_scale: Thermal grip multiplier [0-1]
 
     Returns:
         Maximum braking deceleration [m/s²] (positive value)
@@ -518,8 +556,10 @@ def ax_braking_axle_aware(mu, vehicle, V, kappa, Fdown, M_z_tv=0.0):
         F_zf = max(0.0, W_f_static + dW)  # Front loads up under braking
         F_zr = max(0.0, W_r_static - dW)  # Rear unloads under braking
 
-        F_x_brake_f = available_longitudinal_force(tyre, F_zf, F_yf, n_tyres=2)
-        F_x_brake_r = available_longitudinal_force(tyre, F_zr, F_yr, n_tyres=2)
+        F_x_brake_f = available_longitudinal_force(tyre, F_zf, F_yf, n_tyres=2,
+                                                   grip_scale=grip_scale)
+        F_x_brake_r = available_longitudinal_force(tyre, F_zr, F_yr, n_tyres=2,
+                                                   grip_scale=grip_scale)
         F_x_brake = F_x_brake_f + F_x_brake_r
 
         a_x_brake = F_x_brake / m
