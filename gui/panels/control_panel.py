@@ -309,6 +309,9 @@ class ControlPanel(ttk.Frame):
         # Battery parameters with enable checkbox
         self._create_battery_section()
 
+        # Simulation options (gear ratio sweep toggle, etc.)
+        self._create_simulation_options_section()
+
     def _create_vehicle_section(self):
         """Create vehicle parameters section with mass breakdown for custom mode."""
         frame = ttk.LabelFrame(self.scrollable_frame, text="VEHICLE", padding=(10, 5))
@@ -1663,6 +1666,21 @@ class ControlPanel(ttk.Frame):
             if isinstance(widget, ttk.Entry):
                 widget.configure(state=state)
 
+    def _create_simulation_options_section(self):
+        """Create simulation options section with gear ratio sweep toggle."""
+        frame = ttk.LabelFrame(
+            self.scrollable_frame, text="SIMULATION OPTIONS", padding=(10, 5)
+        )
+        frame.pack(fill="x", padx=10, pady=5)
+
+        self.gear_sweep_enabled = tk.BooleanVar(value=False)
+        self.gear_sweep_checkbox = ttk.Checkbutton(
+            frame,
+            text="Enable Gear Ratio Sweep",
+            variable=self.gear_sweep_enabled,
+        )
+        self.gear_sweep_checkbox.pack(anchor="w", padx=5, pady=2)
+
     def _create_action_buttons(self):
         """Create load, save, and run buttons."""
         # Config buttons frame - use grid for alignment with input fields
@@ -1823,6 +1841,10 @@ class ControlPanel(ttk.Frame):
         if hasattr(self, "tv_checkbox"):
             self.tv_checkbox.configure(state=state)
             self._update_tv_state()
+
+        # Update gear ratio sweep checkbox
+        if hasattr(self, "gear_sweep_checkbox"):
+            self.gear_sweep_checkbox.configure(state=state)
 
         # Reset to defaults when switching to standard
         if not is_custom:
@@ -1992,6 +2014,12 @@ class ControlPanel(ttk.Frame):
                 self.regen_enabled.set(config["battery"].get("regen_enabled", False))
             self._update_battery_state()
 
+        # Handle simulation options
+        if "simulation_options" in config and hasattr(self, "gear_sweep_enabled"):
+            self.gear_sweep_enabled.set(
+                config["simulation_options"].get("gear_ratio_sweep", False)
+            )
+
         # Handle torque vectoring enabled state
         if "torque_vectoring" in config and hasattr(self, "tv_enabled"):
             self.tv_enabled.set(config["torque_vectoring"].get("enabled", False))
@@ -2101,6 +2129,11 @@ class ControlPanel(ttk.Frame):
             if "torque_vectoring" not in config:
                 config["torque_vectoring"] = {}
             config["torque_vectoring"]["enabled"] = self.tv_enabled.get()
+
+        # Add simulation options
+        config["simulation_options"] = {
+            "gear_ratio_sweep": self.gear_sweep_enabled.get(),
+        }
 
         return config
 

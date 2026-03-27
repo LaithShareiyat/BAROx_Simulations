@@ -334,8 +334,11 @@ class BAROxGUI:
                 )
                 results["skidpad"] = self._run_skidpad(vehicle)
 
-            # Run parameter sweeps (autocross only)
-            if event_type in ("autocross", "both"):
+            # Run parameter sweeps (autocross only, if enabled)
+            gear_sweep = config.get("simulation_options", {}).get(
+                "gear_ratio_sweep", False
+            )
+            if event_type in ("autocross", "both") and gear_sweep:
                 self.root.after(
                     0,
                     lambda: self.results_panel.set_status(
