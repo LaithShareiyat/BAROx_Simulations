@@ -1,37 +1,34 @@
 """
-Pacejka Magic Formula verification plots.
+Pacejka Magic Formula Tyre Model Verification.
 
-Generates 6 plots to visually verify the tyre model:
-1. Pure lateral force (Fy) vs slip angle at multiple loads
-2. Pure longitudinal force (Fx) vs slip ratio at multiple loads
-3. Load sensitivity — effective mu vs vertical load
-4. Combined slip — Fx reduction with increasing slip angle
-5. Combined slip — Fy reduction with increasing slip ratio
-6. Friction ellipse — combined slip force envelope
+Produces five individual verification plots, each validating a specific
+aspect of the implementation against known analytical properties of the
+Magic Formula.
 
 Usage:
-    python scripts/pacejka_verification.py
+    python test/pacejka_verification.py
 """
 
 import numpy as np
 import matplotlib.pyplot as plt
+import math
 import yaml
 import os
 import sys
 
-# Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models.vehicle import PacejkaCoefficients, PacejkaParams
-from physics.tyre import pacejka_Fy0, pacejka_Fx0, pacejka_combined_Fx, pacejka_combined_Fy
+from physics.tyre import (
+    _pacejka_BCDE, pacejka_Fy0, pacejka_Fx0,
+    pacejka_combined_Fx, pacejka_combined_Fy,
+)
+
+SAVE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def load_tyre_preset(preset_id: str = "hoosier_r25b_18x6") -> tuple:
-    """Load a tyre preset from the database.
-
-    Returns:
-        (PacejkaParams, preset_dict)
-    """
+def load_tyre():
+    """Load tyre preset from config/tyres.yaml."""
     tyres_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         "config", "tyres.yaml",
@@ -39,7 +36,7 @@ def load_tyre_preset(preset_id: str = "hoosier_r25b_18x6") -> tuple:
     with open(tyres_path, "r") as f:
         db = yaml.safe_load(f)
 
-    t = db["tyres"][preset_id]
+    t = db["tyres"]["hoosier_r25b_18x6"]
     lat = PacejkaCoefficients(**t["lateral"])
     lon = PacejkaCoefficients(**t["longitudinal"])
     pac = PacejkaParams(
@@ -50,118 +47,114 @@ def load_tyre_preset(preset_id: str = "hoosier_r25b_18x6") -> tuple:
         C_alpha_f=t["C_alpha_f"],
         C_alpha_r=t["C_alpha_r"],
     )
-    return pac, t
+    return pac, lat, lon
 
 
-def plot_verification(preset_id: str = "hoosier_r25b_18x6",
-                      save_path: str = None):
-    """Generate the 6-panel Pacejka verification figure."""
-    pac, t = load_tyre_preset(preset_id)
-    lat = pac.lateral
-    lon = pac.longitudinal
+def plot_lateral_force(lat, loads, colours):
+    """Fig 1: Lateral force vs slip angle at multiple vertical loads."""
+    alphas_deg = np.linspace(-15, 15, 500)
+    alphas_rad = np.deg2rad(alphas_deg)
 
-    loads = [400, 800, 1200, 1500]
-    colours = ["#2196F3", "#4CAF50", "#FF9800", "#F44336"]
-
-    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
-    fig.suptitle(
-        "Pacejka Validation", fontsize=14, fontweight="bold"
-    )
-
-    # ---- Plot 1: Fy vs alpha ----
-    ax = axes[0, 0]
-    alpha = np.linspace(-0.25, 0.25, 500)
+    fig, ax = plt.subplots(figsize=(8, 5))
     for Fz, c in zip(loads, colours):
-        Fy = [pacejka_Fy0(a, Fz, lat) for a in alpha]
-        ax.plot(np.degrees(alpha), Fy, color=c, linewidth=2, label=f"Fz = {Fz} N")
-    ax.set_xlabel("Slip Angle [deg]")
-    ax.set_ylabel("Lateral Force Fy [N]")
-    ax.set_title("Pure Lateral Force vs Slip Angle")
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    ax.axhline(y=0, color="k", linewidth=0.5)
-    ax.axvline(x=0, color="k", linewidth=0.5)
+        Fy = [pacejka_Fy0(a, Fz, lat) for a in alphas_rad]
+        ax.plot(alphas_deg, Fy, linewidth=2, color=c, label=f"Fz = {Fz} N")
 
-    # ---- Plot 2: Fx vs kappa ----
-    ax = axes[0, 1]
-    kappa = np.linspace(-0.3, 0.3, 500)
+    ax.set_xlabel("Slip Angle [deg]", fontsize=12)
+    ax.set_ylabel("Lateral Force Fy [N]", fontsize=12)
+    ax.set_title("Lateral Force vs Slip Angle", fontsize=13, fontweight="bold")
+    ax.legend(fontsize=10)
+    ax.grid(True, alpha=0.3)
+    ax.axhline(0, color="black", linewidth=0.5)
+    ax.axvline(0, color="black", linewidth=0.5)
+    fig.tight_layout()
+    fig.savefig(os.path.join(SAVE_DIR, "pacejka_fig1_lateral_force.png"), dpi=150)
+    plt.close(fig)
+    print("  Fig 1 saved: pacejka_fig1_lateral_force.png")
+
+
+def plot_longitudinal_force(lon, loads, colours):
+    """Fig 2: Longitudinal force vs slip ratio at multiple vertical loads."""
+    kappas = np.linspace(-0.3, 0.3, 500)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
     for Fz, c in zip(loads, colours):
-        Fx = [pacejka_Fx0(k, Fz, lon) for k in kappa]
-        ax.plot(kappa, Fx, color=c, linewidth=2, label=f"Fz = {Fz} N")
-    ax.set_xlabel("Slip Ratio [-]")
-    ax.set_ylabel("Longitudinal Force Fx [N]")
-    ax.set_title("Pure Longitudinal Force vs Slip Ratio")
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    ax.axhline(y=0, color="k", linewidth=0.5)
-    ax.axvline(x=0, color="k", linewidth=0.5)
+        Fx = [pacejka_Fx0(k, Fz, lon) for k in kappas]
+        ax.plot(kappas * 100, Fx, linewidth=2, color=c, label=f"Fz = {Fz} N")
 
-    # ---- Plot 3: Effective mu vs Fz (load sensitivity) ----
-    ax = axes[0, 2]
+    ax.set_xlabel("Slip Ratio [%]", fontsize=12)
+    ax.set_ylabel("Longitudinal Force Fx [N]", fontsize=12)
+    ax.set_title("Longitudinal Force vs Slip Ratio", fontsize=13, fontweight="bold")
+    ax.legend(fontsize=10)
+    ax.grid(True, alpha=0.3)
+    ax.axhline(0, color="black", linewidth=0.5)
+    ax.axvline(0, color="black", linewidth=0.5)
+    fig.tight_layout()
+    fig.savefig(os.path.join(SAVE_DIR, "pacejka_fig2_longitudinal_force.png"), dpi=150)
+    plt.close(fig)
+    print("  Fig 2 saved: pacejka_fig2_longitudinal_force.png")
+
+
+def plot_load_sensitivity(lat):
+    """Fig 3: Peak force and effective friction coefficient vs vertical load."""
     Fz_range = np.linspace(100, 3000, 200)
-    mu_lat = [(lat.a1 * Fz + lat.a2) for Fz in Fz_range]
-    mu_lon = [(lon.a1 * Fz + lon.a2) for Fz in Fz_range]
-    ax.plot(Fz_range, mu_lat, color="#2196F3", linewidth=2, label="Lateral mu_eff")
-    ax.plot(Fz_range, mu_lon, color="#F44336", linewidth=2, label="Longitudinal mu_eff")
-    ax.axhline(
-        y=t["mu_peak"], color="grey", linestyle="--", linewidth=1,
-        label=f"mu_peak = {t['mu_peak']}",
-    )
-    ax.axvline(
-        x=t["Fz_nominal"], color="grey", linestyle=":", linewidth=1,
-        label=f"Fz_nom = {t['Fz_nominal']} N",
-    )
-    ax.axvspan(400, 900, alpha=0.1, color="green", label="Typical FSAE per-tyre Fz")
-    ax.set_xlabel("Vertical Load Fz [N]")
-    ax.set_ylabel("Effective Friction Coefficient [-]")
-    ax.set_title("Load Sensitivity")
-    ax.legend(fontsize=8)
-    ax.grid(True, alpha=0.3)
 
-    # ---- Plot 4: Combined slip — Fx vs kappa at different alpha ----
-    ax = axes[1, 0]
-    kappa_pos = np.linspace(0, 0.3, 300)
-    Fz_test = 1500
-    alphas = [0, 0.02, 0.05, 0.1, 0.15]
-    alpha_colours = ["#1a237e", "#2196F3", "#4CAF50", "#FF9800", "#F44336"]
-    for a, c in zip(alphas, alpha_colours):
-        Fx = [pacejka_combined_Fx(k, a, Fz_test, pac) for k in kappa_pos]
-        ax.plot(
-            kappa_pos, Fx, color=c, linewidth=2,
-            label=f"alpha = {np.degrees(a):.1f} deg",
-        )
-    ax.set_xlabel("Slip Ratio [-]")
-    ax.set_ylabel("Longitudinal Force Fx [N]")
-    ax.set_title(f"Combined Slip: Fx (Fz = {Fz_test} N)")
-    ax.legend(fontsize=8)
-    ax.grid(True, alpha=0.3)
+    # Analytical peak: D = (a1*Fz + a2)*Fz
+    D_analytical = np.array([(lat.a1 * Fz + lat.a2) * Fz for Fz in Fz_range])
+    mu_eff = np.array([lat.a1 * Fz + lat.a2 for Fz in Fz_range])
 
-    # ---- Plot 5: Combined slip — Fy vs alpha at different kappa ----
-    ax = axes[1, 1]
-    alpha_pos = np.linspace(0, 0.25, 300)
-    kappas = [0, 0.02, 0.05, 0.1, 0.15]
-    kappa_colours = ["#1a237e", "#2196F3", "#4CAF50", "#FF9800", "#F44336"]
-    for k, c in zip(kappas, kappa_colours):
-        Fy = [pacejka_combined_Fy(k, a, Fz_test, pac) for a in alpha_pos]
-        ax.plot(
-            np.degrees(alpha_pos), Fy, color=c, linewidth=2,
-            label=f"kappa = {k:.2f}",
-        )
-    ax.set_xlabel("Slip Angle [deg]")
-    ax.set_ylabel("Lateral Force Fy [N]")
-    ax.set_title(f"Combined Slip: Fy (Fz = {Fz_test} N)")
-    ax.legend(fontsize=8)
-    ax.grid(True, alpha=0.3)
+    # Numerical peak: sweep slip angle and find max force
+    D_numerical = []
+    for Fz in Fz_range:
+        alphas = np.linspace(0, 0.5, 500)
+        forces = [abs(pacejka_Fy0(a, Fz, lat)) for a in alphas]
+        D_numerical.append(max(forces))
+    D_numerical = np.array(D_numerical)
 
-    # ---- Plot 6: Friction ellipse ----
-    ax = axes[1, 2]
+    fig, ax1 = plt.subplots(figsize=(8, 5))
+    colour_force = "#2070B0"
+    colour_mu = "#D04040"
+
+    ax1.plot(Fz_range, D_analytical, linewidth=2, color=colour_force,
+             label="Analytical D = (a1 Fz + a2) Fz")
+    ax1.plot(Fz_range, D_numerical, linewidth=2.5, linestyle=":",
+             color="black", label="Numerical peak (sweep)")
+    ax1.set_xlabel("Vertical Load Fz [N]", fontsize=12)
+    ax1.set_ylabel("Peak Lateral Force [N]", fontsize=12, color=colour_force)
+    ax1.tick_params(axis="y", labelcolor=colour_force)
+
+    ax2 = ax1.twinx()
+    ax2.plot(Fz_range, mu_eff, linewidth=2, color=colour_mu,
+             label="Effective mu = a1 Fz + a2")
+    ax2.set_ylabel("Effective Friction Coefficient", fontsize=12, color=colour_mu)
+    ax2.tick_params(axis="y", labelcolor=colour_mu)
+
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, fontsize=10, loc="center left")
+    ax1.set_title("Load Sensitivity: Peak Force and Effective Mu",
+                  fontsize=13, fontweight="bold")
+    ax1.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(os.path.join(SAVE_DIR, "pacejka_fig3_load_sensitivity.png"), dpi=150)
+    plt.close(fig)
+
+    max_err = np.max(np.abs(D_analytical - D_numerical))
+    print(f"  Fig 3 saved: pacejka_fig3_load_sensitivity.png  "
+          f"(analytical vs numerical peak error: {max_err:.1f} N)")
+
+
+def plot_friction_ellipse(pac, lat, lon, loads, colours):
+    """Fig 4: Combined slip friction ellipse at multiple loads."""
+    fig, ax = plt.subplots(figsize=(7, 7))
+
     for Fz, c in zip(loads, colours):
         Fx_pts = []
         Fy_pts = []
-        for a in np.linspace(0, 0.2, 100):
+        for a in np.linspace(0, 0.2, 120):
             Fy_val = abs(pacejka_Fy0(a, Fz, lat))
             best_Fx = 0
-            for k in np.linspace(0, 0.3, 50):
+            for k in np.linspace(0, 0.3, 60):
                 Fx_val = pacejka_combined_Fx(k, a, Fz, pac)
                 if Fx_val > best_Fx:
                     best_Fx = Fx_val
@@ -170,41 +163,75 @@ def plot_verification(preset_id: str = "hoosier_r25b_18x6",
 
         Fx_arr = np.array(Fx_pts)
         Fy_arr = np.array(Fy_pts)
+        # Draw all four quadrants
         ax.plot(Fy_arr, Fx_arr, color=c, linewidth=2, label=f"Fz = {Fz} N")
         ax.plot(-Fy_arr, Fx_arr, color=c, linewidth=2)
         ax.plot(Fy_arr, -Fx_arr, color=c, linewidth=2)
         ax.plot(-Fy_arr, -Fx_arr, color=c, linewidth=2)
 
-    ax.set_xlabel("Lateral Force Fy [N]")
-    ax.set_ylabel("Longitudinal Force Fx [N]")
-    ax.set_title("Friction Ellipse (Combined Slip Envelope)")
-    ax.legend(fontsize=8)
+    ax.set_xlabel("Lateral Force Fy [N]", fontsize=12)
+    ax.set_ylabel("Longitudinal Force Fx [N]", fontsize=12)
+    ax.set_title("Combined Slip Friction Ellipse", fontsize=13, fontweight="bold")
+    ax.legend(fontsize=10)
     ax.grid(True, alpha=0.3)
     ax.set_aspect("equal")
+    ax.axhline(0, color="black", linewidth=0.5)
+    ax.axvline(0, color="black", linewidth=0.5)
+    fig.tight_layout()
+    fig.savefig(os.path.join(SAVE_DIR, "pacejka_fig4_friction_ellipse.png"), dpi=150)
+    plt.close(fig)
+    print("  Fig 4 saved: pacejka_fig4_friction_ellipse.png")
 
-    plt.tight_layout()
 
-    if save_path:
-        plt.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"Saved to {save_path}")
-    else:
-        plt.show()
+def plot_cornering_stiffness(lat):
+    """Fig 5: Cornering stiffness vs vertical load."""
+    Fz_range = np.linspace(100, 3000, 200)
 
-    plt.close()
+    # Analytical: BCD = a3 * sin(a4 * atan(a5 * Fz))
+    BCD_analytical = np.array([
+        lat.a3 * math.sin(lat.a4 * math.atan(lat.a5 * Fz))
+        for Fz in Fz_range
+    ])
+
+    # Numerical: finite difference dFy/dalpha at alpha = 0
+    da = 1e-5
+    BCD_numerical = np.array([
+        abs(pacejka_Fy0(da, Fz, lat)) / da
+        for Fz in Fz_range
+    ])
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(Fz_range, BCD_analytical, linewidth=2, color="#2070B0",
+            label="Analytical: a3 sin(a4 atan(a5 Fz))")
+    ax.plot(Fz_range, BCD_numerical, linewidth=2.5, linestyle=":",
+            color="black", label="Numerical: dFy/d(alpha) at alpha = 0")
+    ax.set_xlabel("Vertical Load Fz [N]", fontsize=12)
+    ax.set_ylabel("Cornering Stiffness [N/rad]", fontsize=12)
+    ax.set_title("Cornering Stiffness vs Vertical Load",
+                 fontsize=13, fontweight="bold")
+    ax.legend(fontsize=10)
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(os.path.join(SAVE_DIR, "pacejka_fig5_cornering_stiffness.png"), dpi=150)
+    plt.close(fig)
+
+    max_err = np.max(np.abs(BCD_analytical - BCD_numerical))
+    pct_err = max_err / np.max(BCD_analytical) * 100
+    print(f"  Fig 5 saved: pacejka_fig5_cornering_stiffness.png  "
+          f"(analytical vs numerical error: {pct_err:.2f}%)")
 
 
 if __name__ == "__main__":
-    import argparse
+    pac, lat, lon = load_tyre()
+    loads = [500, 1000, 1500, 2000, 2500]
+    colours = ["#2196F3", "#4CAF50", "#FF9800", "#F44336", "#9C27B0"]
 
-    parser = argparse.ArgumentParser(description="Pacejka verification plots")
-    parser.add_argument(
-        "--tyre", default="hoosier_r25b_18x6",
-        help="Tyre preset ID from config/tyres.yaml",
-    )
-    parser.add_argument(
-        "--save", default=None,
-        help="Save path for the figure (e.g. plots/pacejka.png). Shows interactively if omitted.",
-    )
-    args = parser.parse_args()
-
-    plot_verification(preset_id=args.tyre, save_path=args.save)
+    print("Pacejka Magic Formula Verification")
+    print("=" * 50)
+    plot_lateral_force(lat, loads, colours)
+    plot_longitudinal_force(lon, loads, colours)
+    plot_load_sensitivity(lat)
+    plot_friction_ellipse(pac, lat, lon, loads, colours)
+    plot_cornering_stiffness(lat)
+    print("=" * 50)
+    print("All verification plots generated.")
