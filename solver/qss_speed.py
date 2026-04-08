@@ -22,39 +22,78 @@ from physics.bicycle_model import solve_qss_bicycle, calculate_max_lateral_accel
 from physics.torque_vectoring import calculate_tv_yaw_moment, calculate_tv_lateral_benefit, calculate_tv_traction_benefit
 
 
-def refine_track(track: Track, min_points: int = 500) -> Track:
+def refine_track(track: Track, min_points: int = 500,
+                  adaptive: bool = True, curvature_weight: float = 0.8) -> Track:
     """
-    Refine track to minimum number of points using cubic interpolation.
-    
-    This improves solver accuracy by:
-    - Better curvature estimation at corners
-    - Smoother speed transitions
-    - More accurate lap time integration
-    
+    Refine track to minimum number of points using adaptive spacing.
+
+    By default uses curvature-weighted distribution: more points in corners,
+    fewer on straights.  Set adaptive=False for uniform spacing.
+
     Args:
         track: Original track object
         min_points: Minimum number of points (default 500)
-    
+        adaptive: If True, distribute points proportional to curvature
+        curvature_weight: Blend between uniform (0) and curvature-proportional (1)
+
     Returns:
         Refined Track object (or original if already fine enough)
     """
     if len(track.s) >= min_points:
         return track
-    
+
     from scipy.interpolate import interp1d
     from models.track import from_xy
-    
-    # Create finer arc-length spacing
-    s_fine = np.linspace(0, track.s[-1], min_points)
-    
-    # Interpolate x and y coordinates
-    x_interp = interp1d(track.s, track.x, kind='cubic', fill_value='extrapolate')
-    y_interp = interp1d(track.s, track.y, kind='cubic', fill_value='extrapolate')
-    
-    x_fine = x_interp(s_fine)
-    y_fine = y_interp(s_fine)
-    
-    # Rebuild track with finer resolution
+
+    # Remove duplicate arc-length values for clean interpolation
+    s = track.s
+    unique_mask = np.concatenate(([True], np.diff(s) > 1e-10))
+    s_u = s[unique_mask]
+    x_u = track.x[unique_mask]
+    y_u = track.y[unique_mask]
+    kind = 'cubic' if len(s_u) >= 4 else 'linear'
+
+    if adaptive and len(s_u) >= 4:
+        # Build curvature density along the track
+        kappa_u = np.abs(track.kappa[unique_mask])
+
+        # Skip adaptive for near-constant curvature (e.g. skidpad)
+        kappa_range = kappa_u.max() - kappa_u.min()
+        kappa_mean = kappa_u.mean() + 1e-12
+        if kappa_range / kappa_mean < 0.1:
+            adaptive = False
+
+    if adaptive and len(s_u) >= 4:
+        kappa_u = np.abs(track.kappa[unique_mask])
+        kappa_interp = interp1d(s_u, kappa_u, kind='linear',
+                                fill_value='extrapolate')
+
+        n_sample = min_points * 5
+        s_dense = np.linspace(s_u[0], s_u[-1], n_sample)
+        kappa_dense = np.abs(kappa_interp(s_dense))
+
+        # Density = blend of uniform + curvature-proportional
+        uniform_density = np.ones_like(s_dense)
+        curvature_density = kappa_dense + 1e-6  # floor so straights still get points
+        density = ((1.0 - curvature_weight) * uniform_density
+                   + curvature_weight * curvature_density)
+
+        # Normalised cumulative density -> invert for target arc-lengths
+        cum_density = np.cumsum(density)
+        cum_density /= cum_density[-1]
+
+        target = np.linspace(0, 1, min_points)
+        s_fine = np.interp(target, cum_density, s_dense)
+        s_fine[0] = s_u[0]
+        s_fine[-1] = s_u[-1]
+    else:
+        # Uniform spacing fallback
+        s_fine = np.linspace(s_u[0], s_u[-1], min_points)
+
+    # Interpolate x, y at new positions
+    x_fine = interp1d(s_u, x_u, kind=kind, fill_value='extrapolate')(s_fine)
+    y_fine = interp1d(s_u, y_u, kind=kind, fill_value='extrapolate')(s_fine)
+
     return from_xy(x_fine, y_fine, closed=track.closed)
 
 
@@ -182,7 +221,7 @@ def solve_qss(track: Track, vehicle: VehicleParams,
     if track.closed:
         v_start = v_lat[0]  # Already at cornering speed
     else:
-        v_start = min(v_lat[0], 10.0)  # Standing start
+        v_start = min(v_lat[0], 0.5)  # Standing start (near-zero to avoid div by zero)
     
     v_fwd = np.zeros(n)
     v_fwd[0] = v_start
