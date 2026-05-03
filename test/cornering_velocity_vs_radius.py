@@ -79,30 +79,29 @@ def plot_cornering_velocity():
 
     radii = np.linspace(2.0, 60.0, 300)
     v_max = np.array([max_cornering_speed(R, vehicle) for R in radii])
-    v_max_kmh = v_max * 3.6
 
     fig, ax = plt.subplots(figsize=(10, 6))
 
     # Theoretical sqrt(R) line (no aero: v = sqrt(μg·R))
     mu = vehicle.tyre.mu
     g = vehicle.g
-    v_no_aero_kmh = np.sqrt(mu * g * radii) * 3.6
-    ax.plot(radii, v_no_aero_kmh, color="#888888", linewidth=1.5, linestyle="dashed",
+    v_no_aero = np.sqrt(mu * g * radii)
+    ax.plot(radii, v_no_aero, color="#888888", linewidth=1.5, linestyle="dashed",
             label=r"$v = \sqrt{\mu g R}$ (no aero)")
 
     # Main curve
-    ax.plot(radii, v_max_kmh, color="#2070B0", linewidth=2.5, label="Max cornering speed")
+    ax.plot(radii, v_max, color="#2070B0", linewidth=2.5, label="Max cornering speed")
 
     # Skidpad radius
     v_skidpad = max_cornering_speed(SKIDPAD_RADIUS, vehicle)
     ax.axvline(SKIDPAD_RADIUS, color="#D04040", linewidth=1.5, linestyle="solid",
                label=f"Skidpad (R = {SKIDPAD_RADIUS} m)")
-    ax.plot(SKIDPAD_RADIUS, v_skidpad * 3.6, "o", color="#D04040",
+    ax.plot(SKIDPAD_RADIUS, v_skidpad, "o", color="#D04040",
             markersize=8, zorder=5,
-            label=f"Maximum skidpad cornering speed: {v_skidpad * 3.6:.1f} km/h")
+            label=f"Maximum skidpad cornering speed: {v_skidpad:.1f} m/s")
 
     ax.set_xlabel("Corner Radius [m]", fontsize=12)
-    ax.set_ylabel("Maximum Cornering Speed [km/h]", fontsize=12)
+    ax.set_ylabel("Maximum Cornering Speed [m/s]", fontsize=12)
     ax.set_title("Maximum Cornering Velocity vs Corner Radius", fontsize=14, fontweight="bold")
     ax.legend(fontsize=11, loc="lower right")
     ax.grid(True, alpha=0.3)
@@ -115,7 +114,7 @@ def plot_cornering_velocity():
     plt.close(fig)
     print(f"Saved: {path}")
 
-    print(f"\nSkidpad:  R = {SKIDPAD_RADIUS:.1f} m  ->  v = {v_skidpad*3.6:.1f} km/h")
+    print(f"\nSkidpad:  R = {SKIDPAD_RADIUS:.1f} m  ->  v = {v_skidpad:.1f} m/s ({v_skidpad*3.6:.1f} km/h)")
 
 
 if __name__ == "__main__":

@@ -74,8 +74,8 @@ def build_battery(config):
 def run_events(vehicle, track_ac, track_sk, battery=False):
     """Run autocross + skidpad, optionally with battery analysis."""
     from solver.qss_speed import refine_track
-    track_ac_r = refine_track(track_ac, min_points=500)
-    track_sk_r = refine_track(track_sk, min_points=500)
+    track_ac_r = refine_track(track_ac, min_points=1200)
+    track_sk_r = refine_track(track_sk, min_points=1200)
 
     result_ac, _ = solve_qss(track_ac_r, vehicle, refine=False, use_bicycle_model=True)
     result_sk, _ = solve_qss(track_sk_r, vehicle, refine=False, use_bicycle_model=True)

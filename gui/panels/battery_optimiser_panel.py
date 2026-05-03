@@ -963,9 +963,9 @@ class BatteryOptimiserPanel(ttk.Frame):
             battery = BatteryParams(
                 capacity_kWh=pack_config.capacity_kWh,
                 initial_soc=1.0,
-                min_soc=0.1,
+                min_soc=0.2,
                 max_discharge_kW=pack_config.max_power_kW,
-                eta_discharge=0.95,
+                eta_discharge=0.93,
                 nominal_voltage_V=pack_config.voltage_nominal,
                 max_current_A=pack_config.max_current,
             )

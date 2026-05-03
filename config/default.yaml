@@ -97,9 +97,9 @@ battery:
   # Cell specs: 2600mAh, 3.6V nominal, 45g, 35A max per cell
   capacity_kWh: 6.65      # (2.6Ah × 5P) × (142S × 3.6V) / 1000 = 6.65 kWh
   initial_soc: 1.0        # Start fully charged
-  min_soc: 0.1            # 10% minimum (safety factor)
+  min_soc: 0.2            # 20% minimum (safety factor)
   max_discharge_kW: 80    # Match total motor power (FS 80 kW limit)
-  eta_discharge: 0.95     # Battery discharge efficiency (safety factor)
+  eta_discharge: 0.93     # Battery discharge efficiency (power-weighted average from I²R analysis)
   # Current limiting (FS 2025 rules)
   nominal_voltage_V: 511  # Nominal pack voltage [V] (142S × 3.6V = 511.2V)
   max_current_A: 175      # Maximum discharge current [A] (5P × 35A cell limit = 175A)

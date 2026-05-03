@@ -1,7 +1,7 @@
 """
 Battery Discharge Efficiency Assumption Validation.
 
-Investigates whether the constant eta_discharge = 0.95 assumption is valid
+Investigates whether the constant eta_discharge = 0.93 assumption is valid
 by comparing it against a physics-based I²R internal resistance model.
 
 Cell: 2600 mAh / 3.6 V / 12 mOhm ESR (Samsung 25R class 18650)
@@ -121,7 +121,7 @@ def build_vehicle(config):
         initial_soc=bat_cfg.get("initial_soc", 1.0),
         min_soc=bat_cfg.get("min_soc", 0.1),
         max_discharge_kW=bat_cfg.get("max_discharge_kW", 80),
-        eta_discharge=bat_cfg.get("eta_discharge", 0.95),
+        eta_discharge=bat_cfg.get("eta_discharge", 0.93),
         nominal_voltage_V=bat_cfg.get("nominal_voltage_V", 511),
         max_current_A=bat_cfg.get("max_current_A", 175),
     )

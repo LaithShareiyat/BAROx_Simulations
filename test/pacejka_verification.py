@@ -55,15 +55,79 @@ def plot_lateral_force(lat, loads, colours):
     alphas_deg = np.linspace(-15, 15, 500)
     alphas_rad = np.deg2rad(alphas_deg)
 
-    fig, ax = plt.subplots(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(10, 6))
+    curves = {}
     for Fz, c in zip(loads, colours):
-        Fy = [pacejka_Fy0(a, Fz, lat) for a in alphas_rad]
+        Fy = np.array([pacejka_Fy0(a, Fz, lat) for a in alphas_rad])
         ax.plot(alphas_deg, Fy, linewidth=2, color=c, label=f"Fz = {Fz} N")
+        curves[Fz] = Fy
+
+    # --- Annotate Pacejka coefficients on the highest-load (purple) curve ---
+    ann_Fz = loads[-1]
+    Fy_ann = curves[ann_Fz]
+    B, C, D, E = _pacejka_BCDE(ann_Fz, lat)
+
+    # Positive slip angles only for annotation
+    pos_mask = alphas_deg > 0
+    alphas_pos = alphas_deg[pos_mask]
+    Fy_pos = Fy_ann[pos_mask]
+
+    ann_kw = dict(fontsize=10, fontweight="bold",
+                  bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="grey", alpha=0.9))
+    bracket_col = "black"
+
+    peak_idx = np.argmax(Fy_pos)
+    peak_alpha = alphas_pos[peak_idx]
+    peak_Fy = Fy_pos[peak_idx]
+
+    # Give extra headroom above peak for annotations
+    y_max = peak_Fy * 1.65
+    ax.set_ylim(-y_max, y_max)
+    tick_h = peak_Fy * 0.04
+
+    # Helper: draw a horizontal bracket with tick marks at both ends
+    def _bracket(ax, x1, x2, y, label, text_y):
+        ax.plot([x1, x2], [y, y], color=bracket_col, linewidth=1.5)
+        ax.plot([x1, x1], [y - tick_h, y + tick_h], color=bracket_col, lw=1.5)
+        ax.plot([x2, x2], [y - tick_h, y + tick_h], color=bracket_col, lw=1.5)
+        ax.text((x1 + x2) / 2, text_y, label,
+                ha="center", va="bottom", **ann_kw)
+
+    # Annotation layers — stagger vertically so nothing overlaps
+    row_top = peak_Fy * 1.42     # D and E labels
+    row_mid = peak_Fy * 1.18     # C label
+    row_low = peak_Fy * 0.55     # B label (closer to the low-slope region)
+
+    # D: "Peak" Factor — arrow pointing down to the peak of the curve
+    ax.annotate(
+        'D: "Peak" Factor', xy=(peak_alpha, peak_Fy),
+        xytext=(peak_alpha, row_top),
+        arrowprops=dict(arrowstyle="->, head_width=0.3", lw=1.8, color=bracket_col),
+        ha="center", **ann_kw,
+    )
+
+    # B: "Stiffness" Factor — bracket over initial linear region (0–2 deg)
+    b_x1, b_x2 = 0.2, 2.0
+    b_bracket_y = row_low
+    _bracket(ax, b_x1, b_x2, b_bracket_y,
+             'B: "Stiffness" Factor', b_bracket_y + tick_h + 10)
+
+    # C: "Shape" Factor — bracket over transition/shoulder (2.5 – peak)
+    c_x1, c_x2 = 2.5, peak_alpha - 0.3
+    c_bracket_y = row_mid
+    _bracket(ax, c_x1, c_x2, c_bracket_y,
+             'C: "Shape" Factor', c_bracket_y + tick_h + 10)
+
+    # E: "Curvature" Factor — bracket over the tail/falloff region
+    e_x1, e_x2 = peak_alpha + 1.5, 14.5
+    e_bracket_y = row_mid
+    _bracket(ax, e_x1, e_x2, e_bracket_y,
+             'E: "Curvature" Factor', e_bracket_y + tick_h + 10)
 
     ax.set_xlabel("Slip Angle [deg]", fontsize=12)
     ax.set_ylabel("Lateral Force Fy [N]", fontsize=12)
     ax.set_title("Lateral Force vs Slip Angle", fontsize=13, fontweight="bold")
-    ax.legend(fontsize=10)
+    ax.legend(fontsize=10, loc="lower right")
     ax.grid(True, alpha=0.3)
     ax.axhline(0, color="black", linewidth=0.5)
     ax.axvline(0, color="black", linewidth=0.5)

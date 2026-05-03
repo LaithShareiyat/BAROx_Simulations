@@ -200,9 +200,9 @@ class ControlPanel(ttk.Frame):
             "battery": {
                 "capacity_kWh": 6.65,
                 "initial_soc": 1.0,
-                "min_soc": 0.1,  # 142S5P
+                "min_soc": 0.2,  # 142S5P
                 "max_discharge_kW": 80,
-                "eta_discharge": 0.95,  # FS 80 kW limit
+                "eta_discharge": 0.93,  # Power-weighted average from I²R analysis
                 "nominal_voltage_V": 511,
                 "max_current_A": 175,  # 142S5P pack limits
                 "regen_enabled": False,

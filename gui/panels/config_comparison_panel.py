@@ -340,7 +340,7 @@ class ConfigComparisonPanel(ttk.Frame):
                 initial_soc=bat["initial_soc"],
                 min_soc=bat["min_soc"],
                 max_discharge_kW=bat["max_discharge_kW"],
-                eta_discharge=bat.get("eta_discharge", 0.95),
+                eta_discharge=bat.get("eta_discharge", 0.93),
                 nominal_voltage_V=bat.get("nominal_voltage_V", 511.0),
                 max_current_A=bat.get("max_current_A", 175.0),
                 regen_enabled=bat.get("regen_enabled", False),

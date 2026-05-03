@@ -109,7 +109,7 @@ def build_vehicle(config):
         initial_soc=bat_cfg.get("initial_soc", 1.0),
         min_soc=bat_cfg.get("min_soc", 0.1),
         max_discharge_kW=bat_cfg.get("max_discharge_kW", 80),
-        eta_discharge=bat_cfg.get("eta_discharge", 0.95),
+        eta_discharge=bat_cfg.get("eta_discharge", 0.93),
         nominal_voltage_V=bat_cfg.get("nominal_voltage_V", 511),
         max_current_A=bat_cfg.get("max_current_A", 175),
     )
@@ -216,27 +216,27 @@ def fig3_single_lap_temperature(power_kW, dt, lap_time, save_dir=None):
     n_seg = len(power_kW)
     cell_heat_cap = CELL_MASS_G * CELL_SPECIFIC_HEAT  # [J/K]
 
-    # Cumulative heat and temperature
+    # Cumulative heat and delta T
     Q_cum = 0.0
-    T_profile = np.zeros(n_seg)
+    dT_profile = np.zeros(n_seg)
     for i in range(n_seg):
         if power_kW[i] > 0:
             I_pack = current_from_power(power_kW[i])
             I_cell = I_pack / N_PARALLEL
             Q_cum += I_cell**2 * (CELL_ESR_MOHM / 1000.0) * dt[i]
-        T_profile[i] = T_AMBIENT + Q_cum / cell_heat_cap
+        dT_profile[i] = Q_cum / cell_heat_cap
 
     time_s = np.cumsum(dt)
 
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.set_title("Cell Temperature Over a Single Autocross Lap (No Cooling)",
+    ax.set_title("Cell Temperature Rise Over a Single Autocross Lap (No Cooling)",
                  fontsize=13, fontweight="bold")
 
-    ax.plot(time_s, T_profile, "#FF5722", linewidth=2.5)
-    ax.axhline(T_AMBIENT, color="grey", linewidth=0.8, alpha=0.5)
+    ax.plot(time_s, dT_profile, "#FF5722", linewidth=2.5)
+    ax.axhline(0, color="grey", linewidth=0.8, alpha=0.5)
 
     ax.set_xlabel("Time [s]")
-    ax.set_ylabel("Cell temperature [C]")
+    ax.set_ylabel("\u0394T from ambient [C]")
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
@@ -246,11 +246,9 @@ def fig3_single_lap_temperature(power_kW, dt, lap_time, save_dir=None):
         print(f"  Saved: {path}")
     plt.show()
 
-    dT = T_profile[-1] - T_AMBIENT
+    dT = dT_profile[-1]
     print(f"\n  Single lap temperature rise (adiabatic):")
-    print(f"    Start:  {T_AMBIENT:.1f} C")
-    print(f"    End:    {T_profile[-1]:.1f} C")
-    print(f"    Rise:   {dT:.2f} C")
+    print(f"    \u0394T:     {dT:.2f} C")
 
 
 # ── Figure 4: Endurance temperature (forced air cooling) ──────────────────

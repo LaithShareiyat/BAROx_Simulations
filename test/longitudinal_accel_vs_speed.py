@@ -83,26 +83,26 @@ def plot_accel_vs_speed():
 
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    ax.plot(speeds_kmh, ax_traction, color="#30A050", linewidth=2, label="Traction limit (tyre grip)")
-    ax.plot(speeds_kmh, ax_power, color="#2070B0", linewidth=2, label="Power limit (motor)")
-    ax.plot(speeds_kmh, ax_net, color="black", linewidth=2.5, linestyle="dashed", label="Actual acceleration")
+    ax.plot(speeds, ax_traction, color="#30A050", linewidth=2, label="Traction limit (tyre grip)")
+    ax.plot(speeds, ax_power, color="#2070B0", linewidth=2, label="Power limit (motor)")
+    ax.plot(speeds, ax_net, color="black", linewidth=2.5, linestyle="dashed", label="Actual acceleration")
 
     # Find crossover point
     diff = ax_traction - ax_power
     crossover_idx = np.where(np.diff(np.sign(diff)))[0]
     if len(crossover_idx) > 0:
         idx = crossover_idx[0]
-        v_cross = speeds_kmh[idx]
+        v_cross = speeds[idx]
         a_cross = ax_net[idx]
         ax.plot(v_cross, a_cross, "o", color="#D04040", markersize=8, zorder=5,
-                label=f"Crossover speed: {v_cross:.0f} km/h")
+                label=f"Crossover speed: {v_cross:.1f} m/s")
 
-    ax.set_xlabel("Vehicle Speed [km/h]", fontsize=12)
+    ax.set_xlabel("Vehicle Speed [m/s]", fontsize=12)
     ax.set_ylabel("Longitudinal Acceleration [m/s²]", fontsize=12)
     ax.set_title("Longitudinal Acceleration vs Vehicle Speed", fontsize=14, fontweight="bold")
     ax.legend(fontsize=11, loc="upper right")
     ax.grid(True, alpha=0.3)
-    ax.set_xlim(0, speeds_kmh[-1])
+    ax.set_xlim(0, speeds[-1])
     ax.set_ylim(bottom=0)
 
     fig.tight_layout()
@@ -112,7 +112,7 @@ def plot_accel_vs_speed():
     print(f"Saved: {path}")
 
     if len(crossover_idx) > 0:
-        print(f"Crossover at {v_cross:.1f} km/h ({speeds[crossover_idx[0]]:.1f} m/s)")
+        print(f"Crossover at {v_cross:.1f} m/s ({v_cross * 3.6:.1f} km/h)")
 
 
 if __name__ == "__main__":

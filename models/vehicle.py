@@ -357,9 +357,9 @@ class BatteryParams:
 
     capacity_kWh: float  # Total battery capacity [kWh]
     initial_soc: float = 1.0  # Initial state of charge [0-1]
-    min_soc: float = 0.1  # Minimum allowed SoC [0-1] (safety margin)
+    min_soc: float = 0.2  # Minimum allowed SoC [0-1] (safety margin)
     max_discharge_kW: float = 80.0  # Maximum discharge power [kW]
-    eta_discharge: float = 0.95  # Battery discharge efficiency
+    eta_discharge: float = 0.93  # Battery discharge efficiency
     # Current limiting (142S5P pack default)
     nominal_voltage_V: float = 511.0  # Nominal pack voltage [V] (142S × 3.6V)
     max_current_A: float = 175.0  # Maximum discharge current [A] (5P × 35A cell limit)

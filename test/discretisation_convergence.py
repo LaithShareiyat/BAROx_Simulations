@@ -113,48 +113,39 @@ def run_convergence_study():
 
 
 def plot_convergence(n_points, lap_times, runtimes, actual_points):
-    lt_ref = lap_times[-1]
+    fig, ax1 = plt.subplots(figsize=(10, 6))
 
-    # --- Plot 1: Lap Time Convergence ---
-    fig1, ax1 = plt.subplots(figsize=(10, 6))
-
-    ax1.plot(n_points, lap_times, color="#2070B0", linewidth=2, marker="o",
-             markersize=5)
-
+    # Lap time on left y-axis
+    ln1 = ax1.plot(n_points, lap_times, color="#2070B0", linewidth=2, marker="o",
+                   markersize=5, label="Lap Time")
     ax1.set_xlabel("Number of Segments", fontsize=12)
-    ax1.set_ylabel("Lap Time [s]", fontsize=12)
-    ax1.set_title("Lap Time Convergence vs Discretisation",
-                  fontsize=14, fontweight="bold")
-    ax1.grid(True, alpha=0.3)
+    ax1.set_ylabel("Lap Time [s]", fontsize=12, color="#2070B0")
+    ax1.tick_params(axis="y", labelcolor="#2070B0")
     ax1.set_xscale("log")
     ax1.set_xlim(n_points[0] * 0.8, n_points[-1] * 1.2)
+    ax1.grid(True, alpha=0.3)
 
-    fig1.tight_layout()
-    path1 = os.path.join(SAVE_DIR, "discretisation_laptime.png")
-    fig1.savefig(path1, dpi=150, bbox_inches="tight")
-    plt.close(fig1)
-    print(f"\nSaved: {path1}")
-
-    # --- Plot 2: Runtime ---
-    fig2, ax2 = plt.subplots(figsize=(10, 6))
-
-    ax2.plot(n_points, [r * 1000 for r in runtimes], color="#D04040", linewidth=2,
-             marker="o", markersize=5)
-
-    ax2.set_xlabel("Number of Segments", fontsize=12)
-    ax2.set_ylabel("Runtime [ms]", fontsize=12)
-    ax2.set_title("Solver Runtime vs Discretisation",
-                  fontsize=14, fontweight="bold")
-    ax2.grid(True, alpha=0.3)
-    ax2.set_xscale("log")
-    ax2.set_xlim(n_points[0] * 0.8, n_points[-1] * 1.2)
+    # Runtime on right y-axis
+    ax2 = ax1.twinx()
+    ln2 = ax2.plot(n_points, [r * 1000 for r in runtimes], color="#D04040",
+                   linewidth=2, marker="s", markersize=5, label="Runtime")
+    ax2.set_ylabel("Runtime [ms]", fontsize=12, color="#D04040")
+    ax2.tick_params(axis="y", labelcolor="#D04040")
     ax2.set_ylim(bottom=0)
 
-    fig2.tight_layout()
-    path2 = os.path.join(SAVE_DIR, "discretisation_runtime.png")
-    fig2.savefig(path2, dpi=150, bbox_inches="tight")
-    plt.close(fig2)
-    print(f"Saved: {path2}")
+    # Combined legend
+    lines = ln1 + ln2
+    labels = [l.get_label() for l in lines]
+    ax1.legend(lines, labels, fontsize=11, loc="lower right")
+
+    ax1.set_title("Lap Time Convergence and Solver Runtime vs Discretisation",
+                  fontsize=14, fontweight="bold")
+
+    fig.tight_layout()
+    path = os.path.join(SAVE_DIR, "discretisation_convergence.png")
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"\nSaved: {path}")
 
 
 if __name__ == "__main__":
