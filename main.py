@@ -149,9 +149,9 @@ def create_vehicle_from_config(config: dict) -> VehicleParams:
         battery = BatteryParams(
             capacity_kWh=config["battery"]["capacity_kWh"],
             initial_soc=config["battery"].get("initial_soc", 1.0),
-            min_soc=config["battery"].get("min_soc", 0.1),
+            min_soc=config["battery"].get("min_soc", 0.2),
             max_discharge_kW=config["battery"].get("max_discharge_kW", 80.0),
-            eta_discharge=config["battery"].get("eta_discharge", 0.95),
+            eta_discharge=config["battery"].get("eta_discharge", 0.93),
             # Current limiting (142S5P pack default)
             nominal_voltage_V=config["battery"].get("nominal_voltage_V", 511.0),
             max_current_A=config["battery"].get("max_current_A", 175.0),
@@ -404,9 +404,9 @@ def get_custom_vehicle_params(defaults: dict) -> dict:
         {
             "capacity_kWh": 6.65,  # 142S5P pack
             "initial_soc": 1.0,
-            "min_soc": 0.1,
+            "min_soc": 0.2,
             "max_discharge_kW": 80.0,  # Match FS 80 kW total power limit
-            "eta_discharge": 0.95,
+            "eta_discharge": 0.93,
             "nominal_voltage_V": 511.0,  # 142S × 3.6V
             "max_current_A": 175.0,  # 5P × 35A cell limit
             "regen_enabled": False,
@@ -514,7 +514,7 @@ def get_custom_vehicle_params(defaults: dict) -> dict:
             "initial_soc": float(battery_answers["initial_soc"]),
             "min_soc": float(battery_answers["min_soc"]),
             "max_discharge_kW": float(battery_answers["max_discharge_kW"]),
-            "eta_discharge": battery_defaults.get("eta_discharge", 0.95),
+            "eta_discharge": battery_defaults.get("eta_discharge", 0.93),
             # Current limiting (FS 2025 rules)
             "nominal_voltage_V": float(battery_answers["nominal_voltage_V"]),
             "max_current_A": float(battery_answers["max_current_A"]),
@@ -632,7 +632,7 @@ def print_vehicle_params(config: dict):
         print(f"    Min SoC:           {config['battery']['min_soc']:.0%}")
         print(f"    Max discharge:     {config['battery']['max_discharge_kW']} kW")
         print(
-            f"    Efficiency:        {config['battery'].get('eta_discharge', 0.95):.0%}"
+            f"    Efficiency:        {config['battery'].get('eta_discharge', 0.93):.0%}"
         )
 
         # Current limiting (FS 2025 rules)

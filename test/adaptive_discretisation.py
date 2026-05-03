@@ -69,46 +69,58 @@ def resample_uniform(track, n_points):
     return from_xy(x_new, y_new, closed=track.closed)
 
 
-def resample_adaptive(track, n_points, curvature_weight=0.8):
-    """Resample track with curvature-weighted spacing.
+def _resample_curvature_power(track, n_points, power=1.0, curvature_weight=0.8):
+    """Resample track with curvature^power weighted spacing.
 
     Points are distributed so that regions of high curvature receive
-    proportionally more segments.  ``curvature_weight`` controls the
-    blend between uniform (0.0) and fully curvature-proportional (1.0).
+    proportionally more segments.  ``power`` controls the nonlinearity:
+    1.0 = linear |κ|, 0.5 = sqrt(|κ|), 2.0 = κ².
+    ``curvature_weight`` blends between uniform (0.0) and fully
+    curvature-proportional (1.0).
     """
     s_u, x_u, y_u = _clean_track_for_interp(track)
     kind = "cubic" if len(s_u) >= 4 else "linear"
 
-    # Build a curvature density function along the track
     kappa_interp = interp1d(s_u, np.abs(track.kappa[np.concatenate(([True], np.diff(track.s) > 1e-10))]),
                             kind="linear", fill_value="extrapolate")
 
-    # Sample curvature at many points to build the density
     n_sample = max(10000, n_points * 10)
     s_dense = np.linspace(s_u[0], s_u[-1], n_sample)
     kappa_dense = np.abs(kappa_interp(s_dense))
 
-    # Density = blend of uniform + curvature-proportional
     uniform_density = np.ones_like(s_dense)
-    curvature_density = kappa_dense + 1e-6  # small floor so straights still get points
+    curvature_density = np.power(kappa_dense, power) + 1e-6
     density = (1.0 - curvature_weight) * uniform_density + curvature_weight * curvature_density
 
-    # Normalised cumulative density -> maps [0, s_max] to [0, 1]
     cum_density = np.cumsum(density)
     cum_density = cum_density / cum_density[-1]
 
-    # Invert: for n_points equally spaced in cumulative-density space,
-    # find corresponding arc-length positions
     target = np.linspace(0, 1, n_points)
     s_new = np.interp(target, cum_density, s_dense)
-
-    # Ensure endpoints are exact
     s_new[0] = s_u[0]
     s_new[-1] = s_u[-1]
 
     x_new = interp1d(s_u, x_u, kind=kind)(s_new)
     y_new = interp1d(s_u, y_u, kind=kind)(s_new)
     return from_xy(x_new, y_new, closed=track.closed)
+
+
+def resample_adaptive(track, n_points, curvature_weight=0.8):
+    """Resample with sqrt-curvature weighting (κ^0.5) — best convergence."""
+    return _resample_curvature_power(track, n_points, power=0.5,
+                                      curvature_weight=curvature_weight)
+
+
+def resample_linear_kappa(track, n_points, curvature_weight=0.8):
+    """Resample with linear curvature weighting (κ^1.0)."""
+    return _resample_curvature_power(track, n_points, power=1.0,
+                                      curvature_weight=curvature_weight)
+
+
+def resample_kappa_squared(track, n_points, curvature_weight=0.8):
+    """Resample with squared curvature weighting (κ^2)."""
+    return _resample_curvature_power(track, n_points, power=2.0,
+                                      curvature_weight=curvature_weight)
 
 
 def run_study():
@@ -124,15 +136,18 @@ def run_study():
     n_points_list = [50, 75, 100, 150, 200, 300, 500, 750,
                      1000, 1500, 2000, 3000, 5000, 7500, 10000]
 
-    results = {"uniform": {"lt": [], "rt": []},
-               "adaptive": {"lt": [], "rt": []}}
+    methods = [
+        ("uniform",  resample_uniform),
+        ("adaptive", lambda t, n: resample_adaptive(t, n)),
+    ]
+
+    results = {name: {"lt": [], "rt": []} for name, _ in methods}
 
     n_runs = 3
 
     print("Running comparison...")
     for n_pts in n_points_list:
-        for method, resample_fn in [("uniform", resample_uniform),
-                                     ("adaptive", lambda t, n: resample_adaptive(t, n))]:
+        for method_name, resample_fn in methods:
             track = resample_fn(track_raw, n_pts)
             times = []
             lt = None
@@ -143,14 +158,14 @@ def run_study():
                 times.append(t1 - t0)
 
             avg_rt = np.mean(times)
-            results[method]["lt"].append(lt)
-            results[method]["rt"].append(avg_rt)
+            results[method_name]["lt"].append(lt)
+            results[method_name]["rt"].append(avg_rt)
 
-        err_u = abs(results["uniform"]["lt"][-1] - lt_ref) / lt_ref * 100
-        err_a = abs(results["adaptive"]["lt"][-1] - lt_ref) / lt_ref * 100
-        print(f"  N = {n_pts:5d}  |  Uniform: {results['uniform']['lt'][-1]:.2f} s "
-              f"({err_u:.2f}%)  |  Adaptive: {results['adaptive']['lt'][-1]:.2f} s "
-              f"({err_a:.2f}%)")
+        errs = {name: abs(results[name]["lt"][-1] - lt_ref) / lt_ref * 100
+                for name, _ in methods}
+        print(f"  N = {n_pts:5d}  |  "
+              + "  |  ".join(f"{name}: {errs[name]:.2f}%"
+                             for name, _ in methods))
 
     return n_points_list, results, lt_ref, track_raw
 
@@ -216,25 +231,50 @@ def plot_study(n_points, results, lt_ref, track_raw):
     track_uni = resample_uniform(track_raw, n_demo)
     track_adp = resample_adaptive(track_raw, n_demo)
 
+    half_width = 1.5  # 3m track / 2
+
     fig3, (ax3a, ax3b) = plt.subplots(1, 2, figsize=(14, 6))
 
-    # Uniform
-    ax3a.plot(track_uni.x, track_uni.y, color="#888888", linewidth=1, zorder=1)
-    ax3a.scatter(track_uni.x, track_uni.y, s=8, color="#D04040", zorder=2)
-    ax3a.set_aspect("equal")
-    ax3a.set_title(f"Uniform ({n_demo} segments)", fontsize=13, fontweight="bold")
-    ax3a.set_xlabel("x [m]", fontsize=11)
-    ax3a.set_ylabel("y [m]", fontsize=11)
-    ax3a.grid(True, alpha=0.3)
+    for ax, trk, colour, title in [
+        (ax3a, track_uni, "#D04040", f"Uniform ({n_demo} segments)"),
+        (ax3b, track_adp, "#2070B0", r"Adaptive $\kappa^{0.5}$" + f" ({n_demo} segments)"),
+    ]:
+        x, y = trk.x, trk.y
 
-    # Adaptive
-    ax3b.plot(track_adp.x, track_adp.y, color="#888888", linewidth=1, zorder=1)
-    ax3b.scatter(track_adp.x, track_adp.y, s=8, color="#2070B0", zorder=2)
-    ax3b.set_aspect("equal")
-    ax3b.set_title(f"Adaptive ({n_demo} segments)", fontsize=13, fontweight="bold")
-    ax3b.set_xlabel("x [m]", fontsize=11)
-    ax3b.set_ylabel("y [m]", fontsize=11)
-    ax3b.grid(True, alpha=0.3)
+        # Track boundary normals
+        dx = np.gradient(x)
+        dy = np.gradient(y)
+        length = np.maximum(np.sqrt(dx**2 + dy**2), 1e-9)
+        nx = -dy / length
+        ny = dx / length
+
+        x_inner = x + half_width * nx
+        y_inner = y + half_width * ny
+        x_outer = x - half_width * nx
+        y_outer = y - half_width * ny
+
+        # Shaded track surface
+        ax.fill(
+            np.concatenate([x_outer, x_inner[::-1]]),
+            np.concatenate([y_outer, y_inner[::-1]]),
+            color="#D0D0D0", alpha=0.5, zorder=0,
+        )
+
+        # Track boundaries
+        ax.plot(x_inner, y_inner, color="black", linewidth=1, alpha=0.5, zorder=1)
+        ax.plot(x_outer, y_outer, color="black", linewidth=1, alpha=0.5, zorder=1)
+
+        # Driving line
+        ax.plot(x, y, color="#888888", linewidth=1, zorder=2)
+
+        # Discretisation points
+        ax.scatter(x, y, s=8, color=colour, zorder=3)
+
+        ax.set_aspect("equal")
+        ax.set_title(title, fontsize=13, fontweight="bold")
+        ax.set_xlabel("x [m]", fontsize=11)
+        ax.set_ylabel("y [m]", fontsize=11)
+        ax.grid(True, alpha=0.3)
 
     fig3.tight_layout()
     path3 = os.path.join(SAVE_DIR, "adaptive_vs_uniform_segments.png")

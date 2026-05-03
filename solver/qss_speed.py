@@ -25,21 +25,21 @@ from physics.torque_vectoring import calculate_tv_yaw_moment, calculate_tv_later
 def refine_track(track: Track, min_points: int = 500,
                   adaptive: bool = True, curvature_weight: float = 0.8) -> Track:
     """
-    Refine track to minimum number of points using adaptive spacing.
+    Resample track to exactly min_points using adaptive spacing.
 
     By default uses curvature-weighted distribution: more points in corners,
     fewer on straights.  Set adaptive=False for uniform spacing.
 
     Args:
         track: Original track object
-        min_points: Minimum number of points (default 500)
+        min_points: Target number of points (default 500)
         adaptive: If True, distribute points proportional to curvature
         curvature_weight: Blend between uniform (0) and curvature-proportional (1)
 
     Returns:
-        Refined Track object (or original if already fine enough)
+        Resampled Track object (or original if already at target count)
     """
-    if len(track.s) >= min_points:
+    if len(track.s) == min_points:
         return track
 
     from scipy.interpolate import interp1d
@@ -72,9 +72,12 @@ def refine_track(track: Track, min_points: int = 500,
         s_dense = np.linspace(s_u[0], s_u[-1], n_sample)
         kappa_dense = np.abs(kappa_interp(s_dense))
 
-        # Density = blend of uniform + curvature-proportional
+        # Density = blend of uniform + sqrt-curvature-proportional
+        # κ^0.5 distributes points more evenly across all corners rather
+        # than over-concentrating in the tightest hairpins, giving better
+        # convergence than linear κ weighting.
         uniform_density = np.ones_like(s_dense)
-        curvature_density = kappa_dense + 1e-6  # floor so straights still get points
+        curvature_density = np.sqrt(kappa_dense) + 1e-6  # floor so straights still get points
         density = ((1.0 - curvature_weight) * uniform_density
                    + curvature_weight * curvature_density)
 

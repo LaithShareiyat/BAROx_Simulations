@@ -411,7 +411,7 @@ class BAROxGUI:
                 initial_soc=config["battery"]["initial_soc"],
                 min_soc=config["battery"]["min_soc"],
                 max_discharge_kW=config["battery"]["max_discharge_kW"],
-                eta_discharge=config["battery"].get("eta_discharge", 0.95),
+                eta_discharge=config["battery"].get("eta_discharge", 0.93),
                 # Current limiting (142S5P pack default)
                 nominal_voltage_V=config["battery"].get("nominal_voltage_V", 511.0),
                 max_current_A=config["battery"].get("max_current_A", 175.0),
