@@ -315,7 +315,7 @@ class ResultsPanel(ttk.Frame):
         """Fallback default config if no callback provided."""
         return {
             "vehicle": {
-                "mass_kg": 239,
+                "mass_kg": 226,
                 "g": 9.81,
                 "Crr": 0.015,
                 "mass_battery_kg": 45,  # 142S5P pack

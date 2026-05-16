@@ -145,11 +145,11 @@ class ControlPanel(ttk.Frame):
         """Fallback default values if config file not found."""
         return {
             "vehicle": {
-                "mass_kg": 239,
+                "mass_kg": 226,
                 "g": 9.81,
                 "Crr": 0.015,
                 # Mass breakdown
-                "mass_chassis_kg": 55,
+                "mass_chassis_kg": 43.4,
                 "mass_aero_kg": 20,
                 "mass_suspension_tyres_kg": 50,
                 "mass_powertrain_kg": 42.6,  # 2× EMRAX 208 (9.4kg) + 2× DTI HV-850 (6.9kg) + 10kg overhead
@@ -353,7 +353,7 @@ class ControlPanel(ttk.Frame):
         self.mass_breakdown_entries = {}
 
         mass_components = [
-            ("mass_chassis_kg", "Chassis", 55),
+            ("mass_chassis_kg", "Chassis", 43.4),
             ("mass_aero_kg", "Aero Package", 20),
             ("mass_suspension_tyres_kg", "Suspension & Tyres", 50),
             ("mass_powertrain_kg", "Powertrain", 45),

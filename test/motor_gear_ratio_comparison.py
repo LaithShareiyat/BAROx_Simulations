@@ -35,6 +35,14 @@ MOTORS = {
     ),
 }
 
+SKIDPAD_TIMES = {
+    "EMRAX 208": 4.659,
+    "YASA P400R": 4.662,
+    "YASA 750R": 4.668,
+    "Plettenberg 30-50-B10": 4.663,
+    "Retorq200-HS": 4.672,
+}
+
 COLOURS = ["#2070B0", "#D04040", "#30A050", "#9040B0", "#E08020"]
 MARKERS = ["o", "s", "D", "^", "v"]
 
@@ -44,8 +52,9 @@ def plot_autocross_vs_gear_ratio():
 
     for i, (name, (gr, lt)) in enumerate(MOTORS.items()):
         gr, lt = np.array(gr), np.array(lt)
+        skidpad_t = SKIDPAD_TIMES[name]
         ax.plot(gr, lt, marker=MARKERS[i], color=COLOURS[i], linewidth=1.8,
-                markersize=7, label=name)
+                markersize=7, label=f"{name} ({skidpad_t:.3f}s)")
 
     ax.set_xlabel("Gear Ratio", fontsize=12)
     ax.set_ylabel("Autocross Lap Time [s]", fontsize=12)
