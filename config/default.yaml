@@ -1,9 +1,9 @@
 vehicle:
-  mass_kg: 239
+  mass_kg: 226
   g: 9.81
   Crr: 0.015
   # Mass breakdown (for custom configuration)
-  mass_chassis_kg: 55              # Chassis (frame, body, seat, harness)
+  mass_chassis_kg: 43.4            # Chassis (frame, body, seat, harness)
   mass_aero_kg: 20                # Aero package (wings, endplates, undertray)
   mass_suspension_tyres_kg: 50    # 20% - Suspension & tyres
   mass_powertrain_kg: 42.6        # 2× EMRAX 208 (9.4kg) + 2× DTI HV-850 (6.9kg) + 10kg overhead = 42.6 kg
@@ -12,12 +12,12 @@ vehicle:
 
 aero:
   rho: 1.225
-  Cd: 1.1     # Drag coefficient [-]
-  Cl_f: 0.75  # Front lift coefficient [-] (downforce positive)
-  Cl_r: 0.75  # Rear lift coefficient [-] (downforce positive)
-  A: 1.0      # Drag reference area [m²]
-  A_f: 1.0    # Front effective area [m²] (downforce)
-  A_r: 1.0    # Rear effective area [m²] (downforce)
+  Cd: 1.2     # Drag coefficient [-]
+  Cl_f: 1.96  # Front lift coefficient [-] (downforce positive)
+  Cl_r: 3.9   # Rear lift coefficient [-] (downforce positive)
+  A: 1.5      # Drag reference area [m²]
+  A_f: 0.12   # Front effective area [m²] (downforce)
+  A_r: 0.285  # Rear effective area [m²] (downforce)
 
 tyre:
   model: pacejka           # "simple" or "pacejka"
@@ -56,12 +56,12 @@ tyre:
 
 # Vehicle geometry for bicycle model and weight transfer
 geometry:
-  wheelbase_m: 1.55     # Total wheelbase [m]
-  L_f_m: 0.75           # CoG to front axle [m]
-  L_r_m: 0.80           # CoG to rear axle [m]
+  wheelbase_m: 1.521    # Total wheelbase [m]
+  L_f_m: 1.0            # CoG to front axle [m]
+  L_r_m: 0.521          # CoG to rear axle [m]
   track_front_m: 1.20   # Front track width [m]
-  track_rear_m: 1.20    # Rear track width [m]
-  h_cg_m: 0.28          # CoG height above ground [m]
+  track_rear_m: 1.30    # Rear track width [m]
+  h_cg_m: 0.255         # CoG height above ground [m]
 
 powertrain:
   # Drivetrain configuration
